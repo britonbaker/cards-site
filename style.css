@@ -45,74 +45,145 @@ html, body {
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-end;
   align-items: center;
-  transition: box-shadow 0.3s ease, transform 0.3s ease;
+  padding-bottom: 24px;
+  transition: transform 0.3s ease;
   position: relative;
   transform-style: preserve-3d;
+  overflow: hidden;
 }
 
 .card:hover {
   transform: translateY(-12px) scale(1.02);
 }
 
-/* Card colors matching 3D objects */
-.card-green {
-  background: linear-gradient(165deg, #d4f5e6 0%, #a8e6cf 50%, #8fd9b8 100%);
-  border-top: 1px solid rgba(255, 255, 255, 0.5);
-  box-shadow:
-    0 4px 20px rgba(70, 150, 140, 0.2),
-    0 1px 3px rgba(70, 150, 140, 0.15);
-}
-.card-green:hover, .card-green.selected {
-  background: linear-gradient(165deg, #c8f0df 0%, #a8e6cf 50%, #7fcca6 100%);
-  box-shadow:
-    0 20px 40px rgba(70, 150, 140, 0.25),
-    0 10px 20px rgba(70, 150, 140, 0.15);
+.card:hover .card-image {
+  transform: scale(1.08);
 }
 
-.card-yellow {
-  background: linear-gradient(165deg, #ffec99 0%, #ffd93d 50%, #f0c830 100%);
-  border-top: 1px solid rgba(255, 255, 255, 0.5);
-  box-shadow:
-    0 4px 20px rgba(180, 150, 50, 0.2),
-    0 1px 3px rgba(180, 150, 50, 0.15);
-}
-.card-yellow:hover, .card-yellow.selected {
-  background: linear-gradient(165deg, #ffe680 0%, #ffd93d 50%, #e6c235 100%);
-  box-shadow:
-    0 20px 40px rgba(180, 150, 50, 0.25),
-    0 10px 20px rgba(180, 150, 50, 0.15);
-}
-
-.card-red {
-  background: linear-gradient(165deg, #ffb3b3 0%, #ff6b6b 50%, #e65555 100%);
-  border-top: 1px solid rgba(255, 255, 255, 0.5);
-  box-shadow:
-    0 4px 20px rgba(180, 80, 120, 0.2),
-    0 1px 3px rgba(180, 80, 120, 0.15);
-}
-.card-red:hover, .card-red.selected {
-  background: linear-gradient(165deg, #ff9999 0%, #ff6b6b 50%, #d94848 100%);
-  box-shadow:
-    0 20px 40px rgba(180, 80, 120, 0.25),
-    0 10px 20px rgba(180, 80, 120, 0.15);
+/* Card background image */
+.card-image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+  transition: transform 0.4s ease;
+  z-index: 0;
+  border-radius: inherit;
 }
 
-/* Card icon */
+/* Card gradient overlay */
+.card-gradient {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 60%;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Disable transitions during GSAP animations */
+.card.no-transition {
+  transition: none !important;
+}
+
+/* Dark overlay on images */
+.card-image::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+/* Active glow overlay - lights up card from bottom when playing */
+.card::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  pointer-events: none;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  mix-blend-mode: soft-light;
+}
+
+.card.active-glow::before {
+  opacity: 1;
+}
+
+.card-green::before {
+  background: linear-gradient(to top, rgba(255, 255, 255, 0.9) 0%, rgba(168, 230, 207, 0.5) 25%, transparent 55%);
+}
+
+.card-yellow::before {
+  background: linear-gradient(to top, rgba(255, 255, 255, 0.9) 0%, rgba(255, 217, 61, 0.5) 25%, transparent 55%);
+}
+
+.card-red::before {
+  background: linear-gradient(to top, rgba(255, 255, 255, 0.9) 0%, rgba(255, 107, 107, 0.5) 25%, transparent 55%);
+}
+
+/* Card colors - gradient overlays */
+.card-green .card-gradient {
+  background: linear-gradient(to top, #a8e6cf 0%, #a8e6cf 10%, transparent 70%);
+}
+
+.card-yellow .card-gradient {
+  background: linear-gradient(to top, #ffd93d 0%, #ffd93d 10%, transparent 70%);
+}
+
+.card-red .card-gradient {
+  background: linear-gradient(to top, #ff6b6b 0%, #ff6b6b 10%, transparent 70%);
+}
+
+/* Card icon shapes - white icons over gradient */
 .card-icon {
-  font-size: 64px;
-  color: rgba(0, 0, 0, 0.2);
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(255, 255, 255, 0.9);
+  position: relative;
+  z-index: 2;
+}
+
+.shape-square {
+  width: 36px;
+  height: 36px;
+}
+
+.shape-circle {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+}
+
+.shape-diamond {
+  width: 32px;
+  height: 32px;
+  transform: rotate(45deg);
 }
 
 .card-label {
   position: absolute;
-  top: 12px;
-  left: 14px;
+  top: 14px;
+  left: 16px;
   font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
-  color: rgba(0, 0, 0, 0.5);
+  color: rgba(255, 255, 255, 0.95);
+  z-index: 2;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 /* Slot container - top position set by JS for responsiveness */
@@ -123,31 +194,102 @@ html, body {
   left: 0;
   width: 100%;
   height: 0;
+  overflow: visible;
 }
 
-/* Slot bars */
+/* Single slot bar - fully rounded */
 .slot-bar {
   width: 240px;
-  height: 4px;
+  height: 8px;
   position: absolute;
   left: 50%;
   margin-left: -120px;
-}
-
-/* Top bar - card goes OVER this (lower z-index) */
-.slot-bar.top {
-  background: #0a0a0a;
-  z-index: 2;
-  top: -4px;
-  border-radius: 8px 8px 0 0;
-}
-
-/* Bottom bar - card goes UNDER this (higher z-index) */
-.slot-bar.bottom {
-  background: #0a0a0a;
-  z-index: 6;
   top: 0;
-  border-radius: 0 0 8px 8px;
+  background: #0a0a0a;
+  border-radius: 4px;
+  z-index: 6;
+}
+
+/* Gradient slot bar - always visible */
+.slot-bar-gradient {
+  width: 240px;
+  height: 8px;
+  position: absolute;
+  left: 50%;
+  margin-left: -120px;
+  top: 0;
+  background: linear-gradient(to right, #aaa 0%, #d9d9d9 3.4%, #d9d9d9 50%, #d9d9d9 98%, #aaa 100%);
+  border-radius: 4px;
+  z-index: 7;
+}
+
+/* Glow emanating from slot - behind card, beam shape with progressive blur */
+.slot-glow {
+  position: fixed;
+  width: 343px;
+  height: 119px;
+  left: 50%;
+  margin-left: -171.5px;
+  top: 0; /* Set dynamically by JS */
+  opacity: 0;
+  pointer-events: none;
+  z-index: 1; /* Behind everything except white background */
+  visibility: hidden;
+  --glow-opacity: 1;
+  color: var(--glow-color, #a8e6cf);
+}
+
+/* Base glow layer styles - SVG */
+.glow-layer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+/* Bottom layer - heavy blur (50px), visible at bottom */
+.glow-layer-blur {
+  filter: blur(40px);
+  opacity: calc(1 * var(--glow-opacity, 1));
+  -webkit-mask-image: linear-gradient(to top, white 0%, white 50%, transparent 80%);
+  mask-image: linear-gradient(to top, white 0%, white 50%, transparent 80%);
+}
+
+/* Middle layer - medium blur (25px), visible in middle */
+.glow-layer-mid {
+  filter: blur(20px);
+  opacity: calc(0.8 * var(--glow-opacity, 1));
+  -webkit-mask-image: linear-gradient(to top, transparent 10%, white 30%, white 70%, transparent 90%);
+  mask-image: linear-gradient(to top, transparent 10%, white 30%, white 70%, transparent 90%);
+}
+
+/* Top layer - light blur (8px), fades out at top */
+.glow-layer-sharp {
+  filter: blur(8px);
+  opacity: calc(0.5 * var(--glow-opacity, 1));
+  -webkit-mask-image: linear-gradient(to top, transparent 30%, white 50%, transparent 85%);
+  mask-image: linear-gradient(to top, transparent 30%, white 50%, transparent 85%);
+}
+
+.slot-glow.visible {
+  opacity: 1;
+  visibility: visible;
+  display: none; /* TEMP: hidden for testing */
+}
+
+/* Glow colors */
+.slot-glow.glow-green {
+  --glow-color: #4ade80;
+}
+
+.slot-glow.glow-yellow {
+  --glow-color: #facc15;
+}
+
+.slot-glow.glow-red {
+  --glow-color: #f87171;
 }
 
 /* The void below - full width white mask, top position set by JS */
@@ -311,16 +453,16 @@ html, body {
   visibility: visible;
 }
 
-/* Music visualizer */
+/* Music visualizer - positioned inside the selected card */
 .visualizer {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  z-index: 20;
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 10;
   display: flex;
   align-items: flex-end;
-  gap: 3px;
-  height: 24px;
+  gap: 2px;
+  height: 16px;
   opacity: 0;
   visibility: hidden;
   transition: opacity 0.3s ease, visibility 0.3s ease;
@@ -332,10 +474,10 @@ html, body {
 }
 
 .visualizer-bar {
-  width: 4px;
-  height: 24px;
-  background: #333;
-  border-radius: 2px;
+  width: 3px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 1.5px;
   transform-origin: bottom;
   transition: transform 0.05s ease-out;
 }
@@ -371,18 +513,11 @@ html, body {
 /* Touch-friendly active states (fallback for hover) */
 @media (hover: none) {
   .card:active {
-    box-shadow:
-      0 20px 40px rgba(0, 0, 0, 0.15),
-      0 10px 20px rgba(0, 0, 0, 0.1),
-      0 0 0 1px rgba(255, 255, 255, 0.1) inset;
     transform: translateY(-6px) scale(1.01);
   }
 
   .card:hover {
     transform: none;
-    box-shadow:
-      0 4px 20px rgba(0, 0, 0, 0.08),
-      0 1px 3px rgba(0, 0, 0, 0.1);
   }
 
   .back-button:active {
@@ -402,13 +537,24 @@ html, body {
   }
 
   .card-icon {
-    font-size: 48px;
+    width: 32px;
+    height: 32px;
+  }
+
+  .shape-circle {
+    width: 36px;
+    height: 36px;
+  }
+
+  .shape-diamond {
+    width: 26px;
+    height: 26px;
   }
 
   .card-label {
     font-size: 12px;
-    top: 10px;
-    left: 12px;
+    top: 12px;
+    left: 14px;
   }
 
   .back-button {
@@ -453,11 +599,26 @@ html, body {
   }
 
   .card-icon {
-    font-size: 52px;
+    width: 32px;
+    height: 32px;
+  }
+
+  .shape-circle {
+    width: 36px;
+    height: 36px;
+  }
+
+  .shape-diamond {
+    width: 26px;
+    height: 26px;
   }
 
   .card-label {
-    font-size: 13px;
+    font-size: 12px;
+  }
+
+  .card {
+    padding-bottom: 20px;
   }
 
   /* Narrower slot for mobile */
@@ -493,14 +654,28 @@ html, body {
   .card {
     width: 160px;
     height: 210px;
+    padding-bottom: 18px;
   }
 
   .card-icon {
-    font-size: 44px;
+    width: 28px;
+    height: 28px;
+  }
+
+  .shape-circle {
+    width: 32px;
+    height: 32px;
+  }
+
+  .shape-diamond {
+    width: 22px;
+    height: 22px;
   }
 
   .card-label {
-    font-size: 12px;
+    font-size: 11px;
+    top: 10px;
+    left: 12px;
   }
 }
 
@@ -514,14 +689,27 @@ html, body {
   .card {
     width: 120px;
     height: 160px;
+    padding-bottom: 14px;
   }
 
   .card-icon {
-    font-size: 36px;
+    width: 24px;
+    height: 24px;
+    border-width: 2px;
+  }
+
+  .shape-circle {
+    width: 28px;
+    height: 28px;
+  }
+
+  .shape-diamond {
+    width: 20px;
+    height: 20px;
   }
 
   .card-label {
-    font-size: 11px;
+    font-size: 10px;
     top: 8px;
     left: 10px;
   }

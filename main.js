@@ -356,12 +356,35 @@ const musicPlayer = {
 const visualizerController = {
   animationId: null,
   bars: null,
+  slotGlow: null,
+  slotBarGradient: null,
+  activeCard: null,
 
-  start() {
+  start(cardIndex) {
     if (!musicPlayer.analyser) return;
 
     this.bars = document.querySelectorAll('.visualizer-bar');
-    if (!this.bars.length) return;
+    this.slotGlow = document.querySelector('.slot-glow');
+    this.slotBarGradient = document.querySelector('.slot-bar-gradient');
+
+    // Activate glow on the card
+    this.activeCard = document.querySelector(`.card[data-index="${cardIndex}"]`);
+    if (this.activeCard) {
+      this.activeCard.classList.add('active-glow');
+    }
+
+    // Set glow color based on card
+    if (this.slotGlow) {
+      this.slotGlow.classList.remove('glow-green', 'glow-yellow', 'glow-red');
+      const colorClass = ['glow-green', 'glow-yellow', 'glow-red'][cardIndex] || 'glow-green';
+      this.slotGlow.classList.add(colorClass);
+      this.slotGlow.classList.add('visible');
+    }
+
+    // Show gradient slot bar
+    if (this.slotBarGradient) {
+      this.slotBarGradient.classList.add('visible');
+    }
 
     const analyser = musicPlayer.analyser;
     const dataArray = new Uint8Array(analyser.frequencyBinCount);
@@ -372,11 +395,21 @@ const visualizerController = {
       // Map frequency bands to bars (pick specific frequencies for each bar)
       const bands = [2, 4, 6, 8, 10]; // Low to high frequency indices
 
-      this.bars.forEach((bar, i) => {
-        const value = dataArray[bands[i]] || 0;
-        const scale = 0.3 + (value / 255) * 0.7; // Min 30%, max 100%
-        bar.style.transform = `scaleY(${scale})`;
-      });
+      if (this.bars.length) {
+        this.bars.forEach((bar, i) => {
+          const value = dataArray[bands[i]] || 0;
+          const scale = 0.3 + (value / 255) * 0.7; // Min 30%, max 100%
+          bar.style.transform = `scaleY(${scale})`;
+        });
+      }
+
+      // Animate slot glow based on bass frequencies (low end)
+      if (this.slotGlow) {
+        // Average of low frequencies for bass response
+        const bassValue = (dataArray[1] + dataArray[2] + dataArray[3]) / 3;
+        const glowOpacity = 0.5 + (bassValue / 255) * 0.5; // Opacity from 0.5 to 1.0
+        this.slotGlow.style.setProperty('--glow-opacity', glowOpacity);
+      }
 
       this.animationId = requestAnimationFrame(update);
     };
@@ -396,6 +429,23 @@ const visualizerController = {
         bar.style.transform = '';
       });
     }
+
+    // Hide and reset slot glow
+    if (this.slotGlow) {
+      this.slotGlow.classList.remove('visible');
+      this.slotGlow.style.removeProperty('--glow-opacity');
+    }
+
+    // Hide gradient slot bar
+    if (this.slotBarGradient) {
+      this.slotBarGradient.classList.remove('visible');
+    }
+
+    // Remove glow from card
+    if (this.activeCard) {
+      this.activeCard.classList.remove('active-glow');
+      this.activeCard = null;
+    }
   }
 };
 
@@ -412,7 +462,7 @@ const sfx = {
     }
   },
 
-  playSlotClick() {
+  playSlotClick(volume = 1.0, pitch = 1.0) {
     this.init();
 
     const ctx = this.audioContext;
@@ -422,32 +472,53 @@ const sfx = {
     gainNode.connect(ctx.destination);
 
     // Quick attack, fast decay
-    gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+    gainNode.gain.setValueAtTime(0.3 * volume, ctx.currentTime);
     gainNode.gain.exponentialDecayTo = 0.01;
     gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
 
     // Low thud oscillator
     const osc1 = ctx.createOscillator();
     osc1.type = 'sine';
-    osc1.frequency.setValueAtTime(150, ctx.currentTime);
-    osc1.frequency.exponentialRampToValueAtTime(50, ctx.currentTime + 0.1);
+    osc1.frequency.setValueAtTime(150 * pitch, ctx.currentTime);
+    osc1.frequency.exponentialRampToValueAtTime(50 * pitch, ctx.currentTime + 0.1);
     osc1.connect(gainNode);
     osc1.start(ctx.currentTime);
     osc1.stop(ctx.currentTime + 0.1);
 
-    // Higher click oscillator
+    // Higher click oscillator - sharper and clickier
     const gainNode2 = ctx.createGain();
     gainNode2.connect(ctx.destination);
-    gainNode2.gain.setValueAtTime(0.2, ctx.currentTime);
-    gainNode2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05);
+    gainNode2.gain.setValueAtTime(0.25 * volume, ctx.currentTime);
+    gainNode2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.03);
 
     const osc2 = ctx.createOscillator();
     osc2.type = 'square';
-    osc2.frequency.setValueAtTime(800, ctx.currentTime);
-    osc2.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.05);
+    osc2.frequency.setValueAtTime(1200 * pitch, ctx.currentTime);
+    osc2.frequency.exponentialRampToValueAtTime(300 * pitch, ctx.currentTime + 0.03);
     osc2.connect(gainNode2);
     osc2.start(ctx.currentTime);
-    osc2.stop(ctx.currentTime + 0.05);
+    osc2.stop(ctx.currentTime + 0.03);
+  },
+
+  // Subtle tick for anticipation/settle
+  playSoftClick(volume = 1.0, pitch = 1.0) {
+    this.init();
+
+    const ctx = this.audioContext;
+
+    // Softer but clicky sound
+    const gainNode = ctx.createGain();
+    gainNode.connect(ctx.destination);
+    gainNode.gain.setValueAtTime(0.18 * volume, ctx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.025);
+
+    const osc = ctx.createOscillator();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(900 * pitch, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(200 * pitch, ctx.currentTime + 0.025);
+    osc.connect(gainNode);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.025);
   }
 };
 
@@ -486,11 +557,17 @@ function updateSlotPosition() {
   const slotContainer = document.querySelector('.slot-container');
   const slotVoid = document.querySelector('.slot-void');
   const speedLines = document.querySelector('.speed-lines');
+  const slotGlow = document.querySelector('.slot-glow');
 
   if (!cardInserted) {
     slotContainer.style.top = slotTop + 'px';
-    slotVoid.style.top = (slotTop + 4) + 'px';
-    speedLines.style.top = (slotTop - 2) + 'px';
+    slotVoid.style.top = (slotTop + 8) + 'px';
+    speedLines.style.top = slotTop + 'px';
+  }
+
+  // Position glow so shape aligns with slot (shape bottom is at y=69 in 119px viewBox)
+  if (slotGlow) {
+    slotGlow.style.top = (slotTop - 69) + 'px';
   }
 }
 
@@ -505,7 +582,7 @@ function insertCard(clickedCard) {
 
   const cards = document.querySelectorAll('.card');
   const slotContainer = document.querySelector('.slot-container');
-  const slotBottom = document.querySelector('.slot-bar.bottom');
+  const slotBarEl = document.querySelector('.slot-bar');
   const clickedIndex = Number(clickedCard.dataset.index);
 
   // Update slot position BEFORE setting cardInserted (updateSlotPosition checks this flag)
@@ -524,7 +601,7 @@ function insertCard(clickedCard) {
 
   // Get positions after reflow
   // Use offsetWidth/offsetHeight to get actual size without hover transform (scale)
-  const slotRect = slotBottom.getBoundingClientRect();
+  const slotRect = slotBarEl.getBoundingClientRect();
   const cardWidth = clickedCard.offsetWidth;
   const cardHeight = clickedCard.offsetHeight;
   const cardRect = clickedCard.getBoundingClientRect();
@@ -537,9 +614,17 @@ function insertCard(clickedCard) {
 
   const tl = gsap.timeline();
 
-  // Step 1: Fade in the slot
-  tl.to(slotContainer, {
-    opacity: 1,
+  // Get slot bar elements
+  const slotBar = document.querySelector('.slot-bar');
+  const slotBarGradient = document.querySelector('.slot-bar-gradient');
+
+  // Start with slot collapsed (scaleY: 0)
+  gsap.set([slotBar, slotBarGradient], { scaleY: 0 });
+  gsap.set(slotContainer, { opacity: 1 });
+
+  // Step 1: Grow the slot (simple, no overshoot)
+  tl.to([slotBar, slotBarGradient], {
+    scaleY: 1,
     duration: 0.3,
     ease: 'power2.out'
   }, 0);
@@ -561,6 +646,15 @@ function insertCard(clickedCard) {
   // Set up fixed positioning - capture current position first
   const startTop = cardRect.top;
   const startLeft = cardRect.left;
+
+  // Create placeholder to maintain flex layout when card becomes fixed
+  const placeholder = document.createElement('div');
+  placeholder.className = 'card-placeholder';
+  placeholder.style.width = cardWidth + 'px';
+  placeholder.style.height = cardHeight + 'px';
+  placeholder.style.flexShrink = '0';
+  placeholder.style.visibility = 'hidden';
+  clickedCard.parentNode.insertBefore(placeholder, clickedCard.nextSibling);
 
   clickedCard.classList.add('inserting');
   clickedCard.classList.add('selected');
@@ -588,25 +682,31 @@ function insertCard(clickedCard) {
     ease: 'power2.in'
   }, 0.85);
 
-  // Trigger speed lines and click sound on impact
+  // Loud click and speed lines on impact
   const speedLines = document.querySelector('.speed-lines');
   tl.call(() => {
     speedLines.classList.add('active');
     sfx.playSlotClick();
   }, [], 1.28);
 
-  // Tiny settle bounce
+  // Overshoot down into slot (follow-through) - like SD card pushing past
   tl.to(clickedCard, {
-    top: targetTop + 3,
-    duration: 0.06,
-    ease: 'power1.out'
+    top: targetTop + 12,
+    duration: 0.08,
+    ease: 'power2.out'
   }, 1.3);
 
+  // Soft click as it locks in
+  tl.call(() => {
+    sfx.playSoftClick();
+  }, [], 1.55);
+
+  // Hold at overshoot position, then settle back up into place
   tl.to(clickedCard, {
     top: targetTop,
-    duration: 0.06,
-    ease: 'power1.in'
-  }, 1.36);
+    duration: 0.12,
+    ease: 'power2.out'
+  }, 1.55);
 
   // After slot animation, move card and slot up together
   // NOTE: Card stays in cardsContainer (DOM unchanged), just animated with fixed positioning
@@ -621,35 +721,53 @@ function insertCard(clickedCard) {
   // Raise card above void before moving up
   tl.call(() => {
     clickedCard.classList.add('inserted');
-  }, [], 1.45);
+  }, [], 1.72);
 
   // Animate card, slot, and void up together (no DOM moves!)
   tl.to(clickedCard, {
     top: cardFinalTop,
     duration: 0.5,
     ease: 'power2.out'
-  }, 1.5);
+  }, 1.77);
 
   tl.to(slotContainer, {
     top: finalTop,
     duration: 0.5,
     ease: 'power2.out'
-  }, 1.5);
+  }, 1.77);
 
   tl.to(slotVoid, {
-    top: finalTop + 4,
+    top: finalTop + 8,
     duration: 0.5,
     ease: 'power2.out'
-  }, 1.5);
+  }, 1.77);
 
-  // Show back button, visualizer, and game content, then start the game
+  // Move glow up with the slot
+  const slotGlow = document.querySelector('.slot-glow');
+  if (slotGlow) {
+    tl.to(slotGlow, {
+      top: finalTop - 69,
+      duration: 0.5,
+      ease: 'power2.out'
+    }, 1.77);
+  }
+
+  // Move visualizer into the selected card (before showing)
+  tl.call(() => {
+    clickedCard.appendChild(visualizer);
+  }, [], 1.77);
+
+  // Show back button and game content, then start the game
   tl.call(() => {
     backButton.classList.add('visible');
-    visualizer.classList.add('visible');
     gameContent.classList.add('visible');
-    // Initialize the game for this card
+    // Initialize the game for this card (starts music)
     gameManager.init(clickedIndex);
-  }, [], 2.0);
+    // Show visualizer after a brief delay so it appears when music starts
+    setTimeout(() => {
+      visualizer.classList.add('visible');
+    }, 100);
+  }, [], 2.27);
 }
 
 // Back button handler
@@ -679,6 +797,9 @@ function goBack() {
 
   const selectedIndex = Number(selectedCard.dataset.index);
 
+  // Disable CSS transitions on cards during GSAP animation to prevent conflicts
+  cards.forEach(card => card.classList.add('no-transition'));
+
   // Get responsive values for original positions
   const { slotTop } = getResponsiveValues();
   const overlapAmount = 40;
@@ -690,65 +811,110 @@ function goBack() {
   // Step 1: Fade out back button, visualizer, and game content
   tl.to([backButton, visualizer, gameContent], {
     opacity: 0,
-    duration: 0.25,
+    duration: 0.2,
     ease: 'power2.in',
     onComplete: () => {
       backButton.classList.remove('visible');
       visualizer.classList.remove('visible');
       gameContent.classList.remove('visible');
+      // Move visualizer back to body for next time
+      document.body.appendChild(visualizer);
     }
   }, 0);
 
   // Step 2: Move card, slot, and void back down to center
   tl.to(selectedCard, {
     top: originalCardTop,
-    duration: 0.4,
+    duration: 0.3,
     ease: 'power2.inOut'
-  }, 0.2);
+  }, 0.15);
 
   tl.to(slotContainer, {
     top: originalSlotTop,
-    duration: 0.4,
+    duration: 0.3,
     ease: 'power2.inOut'
-  }, 0.2);
+  }, 0.15);
 
   tl.to(slotVoid, {
-    top: originalSlotTop + 4,
-    duration: 0.4,
-    ease: 'power2.inOut'
-  }, 0.2);
-
-  // Step 3: Card rises up out of slot (fully visible above slot)
-  tl.to(selectedCard, {
-    top: originalCardTop - 260,
-    duration: 0.35,
-    ease: 'power2.out'
-  }, 0.6);
-
-  // Step 4: Fade out slot (after card is fully out)
-  tl.to(slotContainer, {
-    opacity: 0,
+    top: originalSlotTop + 8,
     duration: 0.3,
-    ease: 'power2.in'
-  }, 0.95);
+    ease: 'power2.inOut'
+  }, 0.15);
 
-  // Step 5: Slide other cards back in first
+  // Move glow back down and hide it
+  const slotGlow = document.querySelector('.slot-glow');
+  if (slotGlow) {
+    tl.to(slotGlow, {
+      top: originalSlotTop - 69,
+      opacity: 0,
+      duration: 0.3,
+      ease: 'power2.inOut',
+      onComplete: () => {
+        slotGlow.classList.remove('visible');
+        slotGlow.style.removeProperty('--glow-opacity');
+        // Hide gradient slot bar
+        const gradientBar = document.querySelector('.slot-bar-gradient');
+        if (gradientBar) gradientBar.classList.remove('visible');
+      }
+    }, 0.15);
+  }
+
+  // Step 3: Anticipation - card pushes down before ejecting (like SD card)
+  // Soft click as it pushes down (quieter and lower pitched for back action)
+  tl.call(() => {
+    sfx.playSoftClick(0.5, 0.8);
+  }, [], 0.4);
+
+  tl.to(selectedCard, {
+    top: originalCardTop + 12,
+    duration: 0.06,
+    ease: 'power2.in'
+  }, 0.4);
+
+  // Hold at pushed position, then loud click as it ejects (quieter and lower pitched)
+  tl.call(() => {
+    sfx.playSlotClick(0.5, 0.8);
+  }, [], 0.55);
+
+  // Step 4: Card pops up out of slot (fully visible above slot)
+  tl.to(selectedCard, {
+    top: originalCardTop - 290,
+    duration: 0.24,
+    ease: 'power2.out'
+  }, 0.55);
+
+  // Step 5: Collapse slot (simple, no overshoot)
+  const slotBar = document.querySelector('.slot-bar');
+  const slotBarGradient = document.querySelector('.slot-bar-gradient');
+  tl.to([slotBar, slotBarGradient], {
+    scaleY: 0,
+    duration: 0.2,
+    ease: 'power2.in',
+    onComplete: () => {
+      // Hide after collapse is complete
+      gsap.set(slotContainer, { opacity: 0 });
+    }
+  }, 0.79);
+
+  // Step 6: Move other cards to position while invisible (with blur)
   tl.call(() => {
     cards.forEach(card => {
       const idx = Number(card.dataset.index);
       if (idx !== selectedIndex) {
-        gsap.to(card, {
-          x: 0,
-          opacity: 1,
-          duration: 0.4,
-          ease: 'power2.out'
-        });
+        // Add blur while repositioning
+        gsap.set(card, { filter: 'blur(8px)' });
+        // Move to position instantly (they're already invisible)
+        gsap.set(card, { x: 0 });
       }
     });
-  }, [], 0.9);
+  }, [], 0.7);
 
-  // Step 6: Animate selected card back to its original position in the row
+  // Step 7: Animate selected card back to its original position in the row
   tl.call(() => {
+    // Remove placeholder before measuring so flex layout is correct
+    const placeholder = document.querySelector('.card-placeholder');
+    if (placeholder) placeholder.remove();
+
     // Create invisible clone to measure target position without affecting the real card
     const clone = selectedCard.cloneNode(true);
     clone.classList.remove('inserting', 'selected', 'inserted');
@@ -765,7 +931,7 @@ function goBack() {
     gsap.to(selectedCard, {
       top: targetRect.top,
       left: targetRect.left,
-      duration: 0.4,
+      duration: 0.28,
       ease: 'power2.out',
       onComplete: () => {
         // Now fully reset to normal flow
@@ -776,9 +942,24 @@ function goBack() {
         gsap.set(selectedCard, { opacity: 1, y: 0 });
       }
     });
-  }, [], 1.1);
+  }, [], 0.9);
 
-  // Step 7: Final cleanup
+  // Step 8: Fade in other cards (after selected card is in place)
+  tl.call(() => {
+    cards.forEach(card => {
+      const idx = Number(card.dataset.index);
+      if (idx !== selectedIndex) {
+        gsap.to(card, {
+          opacity: 1,
+          filter: 'blur(0px)',
+          duration: 0.22,
+          ease: 'power2.out'
+        });
+      }
+    });
+  }, [], 1.18);
+
+  // Step 9: Final cleanup (after fade-in completes)
   tl.call(() => {
     // Reset ALL cards to clean state
     cards.forEach(card => {
@@ -791,10 +972,18 @@ function goBack() {
     const cardsContainer = document.querySelector('.cards-container');
     cardsContainer.classList.remove('card-inserting');
 
+    // Remove placeholder
+    const placeholder = document.querySelector('.card-placeholder');
+    if (placeholder) placeholder.remove();
+
     // Reset slot container
     slotContainer.style.cssText = '';
     gsap.set(slotContainer, { clearProps: 'all' });
     gsap.set(slotContainer, { opacity: 0 });
+
+    // Reset slot bar to collapsed position for next animation
+    const slotBar = document.querySelector('.slot-bar');
+    gsap.set(slotBar, { scaleY: 0 });
 
     // Reset void
     slotVoid.style.cssText = '';
@@ -806,10 +995,13 @@ function goBack() {
     // Reset back button/game content/visualizer opacity for next time
     gsap.set([backButton, gameContent, visualizer], { clearProps: 'opacity' });
 
+    // Re-enable CSS transitions on cards
+    cards.forEach(card => card.classList.remove('no-transition'));
+
     // Allow new card insertion
     cardInserted = false;
     isGoingBack = false;
-  }, [], 1.6);
+  }, [], 1.45);
 }
 
 // Add click listeners to cards after DOM loads
@@ -817,11 +1009,20 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initialize slot position for current viewport
   updateSlotPosition();
 
+  // Initialize slot bar to collapsed state for grow animation
+  const slotBar = document.querySelector('.slot-bar');
+  gsap.set(slotBar, { scaleY: 0 });
+
   const cards = document.querySelectorAll('.card');
   cards.forEach(card => {
     card.addEventListener('click', (e) => {
       e.stopPropagation();
-      insertCard(card);
+      // If this card is already selected, eject it
+      if (card.classList.contains('selected')) {
+        goBack();
+      } else {
+        insertCard(card);
+      }
     });
   });
 
@@ -870,7 +1071,7 @@ const gameManager = {
 
     // Start music for this game
     musicPlayer.play(gameIndex);
-    visualizerController.start();
+    visualizerController.start(gameIndex);
   },
 
   loadGame(gameIndex) {

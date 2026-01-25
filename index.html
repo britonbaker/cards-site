@@ -12,23 +12,45 @@
   <section class="cards-section">
     <div class="cards-container">
       <div class="card card-green" data-index="0">
+        <div class="card-image" style="background-image: url('https://images.unsplash.com/photo-1519608487953-e999c86e7455?w=600&q=80')"></div>
+        <div class="card-gradient"></div>
         <span class="card-label">Cube Runner</span>
-        <span class="card-icon">&#9632;</span>
+        <div class="card-icon shape-square"></div>
       </div>
       <div class="card card-yellow" data-index="1">
+        <div class="card-image" style="background-image: url('https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600&q=80')"></div>
+        <div class="card-gradient"></div>
         <span class="card-label">Ring World</span>
-        <span class="card-icon">&#9711;</span>
+        <div class="card-icon shape-circle"></div>
       </div>
       <div class="card card-red" data-index="2">
+        <div class="card-image" style="background-image: url('https://images.unsplash.com/photo-1534447677768-be436bb09401?w=600&q=80')"></div>
+        <div class="card-gradient"></div>
         <span class="card-label">Crystal Core</span>
-        <span class="card-icon">&#9670;</span>
+        <div class="card-icon shape-diamond"></div>
       </div>
     </div>
 
     <!-- Slot container -->
     <div class="slot-container">
-      <div class="slot-bar top"></div>
-      <div class="slot-bar bottom"></div>
+      <div class="slot-bar"></div>
+      <div class="slot-bar-gradient"></div>
+    </div>
+
+    <!-- Slot glow - behind card, above void -->
+    <div class="slot-glow">
+      <!-- Heavy blur layer (bottom) -->
+      <svg class="glow-layer glow-layer-blur" viewBox="0 0 343 119" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M287.731 69H55.3472C53.8457 69 52.3549 68 51.847 67C48.9241 61.2442 50.3456 50 50.3456 50H292.346C292.346 50 291.352 58.4344 291.352 64.5C291.352 65 291.352 68.5 287.731 69Z" fill="currentColor"/>
+      </svg>
+      <!-- Medium blur layer (middle) -->
+      <svg class="glow-layer glow-layer-mid" viewBox="0 0 343 119" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M287.731 69H55.3472C53.8457 69 52.3549 68 51.847 67C48.9241 61.2442 50.3456 50 50.3456 50H292.346C292.346 50 291.352 58.4344 291.352 64.5C291.352 65 291.352 68.5 287.731 69Z" fill="currentColor"/>
+      </svg>
+      <!-- Light blur layer (top) -->
+      <svg class="glow-layer glow-layer-sharp" viewBox="0 0 343 119" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M287.731 69H55.3472C53.8457 69 52.3549 68 51.847 67C48.9241 61.2442 50.3456 50 50.3456 50H292.346C292.346 50 291.352 58.4344 291.352 64.5C291.352 65 291.352 68.5 287.731 69Z" fill="currentColor"/>
+      </svg>
     </div>
 
     <!-- The void below the slot -->
