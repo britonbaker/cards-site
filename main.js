@@ -4,6 +4,8 @@
 
 const musicPlayer = {
   audioContext: null,
+  masterGain: null,
+  analyser: null,
   isPlaying: false,
   intervalIds: [],
   activeOscillators: [],
@@ -11,6 +13,12 @@ const musicPlayer = {
   init() {
     if (!this.audioContext) {
       this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      // Create master gain and analyser for visualizer
+      this.masterGain = this.audioContext.createGain();
+      this.analyser = this.audioContext.createAnalyser();
+      this.analyser.fftSize = 64;
+      this.masterGain.connect(this.analyser);
+      this.analyser.connect(this.audioContext.destination);
     }
   },
 
@@ -23,7 +31,7 @@ const musicPlayer = {
     osc.type = type;
     osc.frequency.value = freq;
     osc.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(this.masterGain);
 
     gain.gain.setValueAtTime(volume, startTime);
     gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration * 0.9);
@@ -48,7 +56,7 @@ const musicPlayer = {
     gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.15);
 
     osc.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(this.masterGain);
     osc.start(startTime);
     osc.stop(startTime + 0.15);
 
@@ -80,7 +88,7 @@ const musicPlayer = {
 
     noise.connect(filter);
     filter.connect(noiseGain);
-    noiseGain.connect(ctx.destination);
+    noiseGain.connect(this.masterGain);
     noise.start(startTime);
     noise.stop(startTime + 0.1);
 
@@ -93,7 +101,7 @@ const musicPlayer = {
     oscGain.gain.setValueAtTime(0.15, startTime);
     oscGain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.08);
     osc.connect(oscGain);
-    oscGain.connect(ctx.destination);
+    oscGain.connect(this.masterGain);
     osc.start(startTime);
     osc.stop(startTime + 0.08);
 
@@ -123,7 +131,7 @@ const musicPlayer = {
 
     noise.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(this.masterGain);
     noise.start(startTime);
     noise.stop(startTime + (open ? 0.15 : 0.05));
 
@@ -261,7 +269,7 @@ const musicPlayer = {
     osc.type = type;
     osc.frequency.value = freq;
     osc.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(this.masterGain);
 
     // Slow attack, sustain, slow release
     const attackTime = 0.3;
@@ -338,6 +346,56 @@ const musicPlayer = {
       try { osc.stop(); } catch (e) {}
     });
     this.activeOscillators = [];
+  }
+};
+
+// ============================================
+// MUSIC VISUALIZER
+// ============================================
+
+const visualizerController = {
+  animationId: null,
+  bars: null,
+
+  start() {
+    if (!musicPlayer.analyser) return;
+
+    this.bars = document.querySelectorAll('.visualizer-bar');
+    if (!this.bars.length) return;
+
+    const analyser = musicPlayer.analyser;
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+    const update = () => {
+      analyser.getByteFrequencyData(dataArray);
+
+      // Map frequency bands to bars (pick specific frequencies for each bar)
+      const bands = [2, 4, 6, 8, 10]; // Low to high frequency indices
+
+      this.bars.forEach((bar, i) => {
+        const value = dataArray[bands[i]] || 0;
+        const scale = 0.3 + (value / 255) * 0.7; // Min 30%, max 100%
+        bar.style.transform = `scaleY(${scale})`;
+      });
+
+      this.animationId = requestAnimationFrame(update);
+    };
+
+    update();
+  },
+
+  stop() {
+    if (this.animationId) {
+      cancelAnimationFrame(this.animationId);
+      this.animationId = null;
+    }
+
+    // Reset bars to idle animation
+    if (this.bars) {
+      this.bars.forEach(bar => {
+        bar.style.transform = '';
+      });
+    }
   }
 };
 
@@ -554,6 +612,7 @@ function insertCard(clickedCard) {
   // NOTE: Card stays in cardsContainer (DOM unchanged), just animated with fixed positioning
   const backButton = document.querySelector('.back-button');
   const gameContent = document.querySelector('.game-content');
+  const visualizer = document.querySelector('.visualizer');
   const slotVoid = document.querySelector('.slot-void');
 
   const finalTop = 60;
@@ -583,9 +642,10 @@ function insertCard(clickedCard) {
     ease: 'power2.out'
   }, 1.5);
 
-  // Show back button and game content, then start the game
+  // Show back button, visualizer, and game content, then start the game
   tl.call(() => {
     backButton.classList.add('visible');
+    visualizer.classList.add('visible');
     gameContent.classList.add('visible');
     // Initialize the game for this card
     gameManager.init(clickedIndex);
@@ -606,6 +666,7 @@ function goBack() {
   const speedLines = document.querySelector('.speed-lines');
   const backButton = document.querySelector('.back-button');
   const gameContent = document.querySelector('.game-content');
+  const visualizer = document.querySelector('.visualizer');
   const slotVoid = document.querySelector('.slot-void');
   const cards = document.querySelectorAll('.card');
 
@@ -626,13 +687,14 @@ function goBack() {
 
   const tl = gsap.timeline();
 
-  // Step 1: Fade out back button and game content
-  tl.to([backButton, gameContent], {
+  // Step 1: Fade out back button, visualizer, and game content
+  tl.to([backButton, visualizer, gameContent], {
     opacity: 0,
     duration: 0.25,
     ease: 'power2.in',
     onComplete: () => {
       backButton.classList.remove('visible');
+      visualizer.classList.remove('visible');
       gameContent.classList.remove('visible');
     }
   }, 0);
@@ -741,8 +803,8 @@ function goBack() {
     // Reset speed lines
     speedLines.classList.remove('active');
 
-    // Reset back button/game content opacity for next time
-    gsap.set([backButton, gameContent], { clearProps: 'opacity' });
+    // Reset back button/game content/visualizer opacity for next time
+    gsap.set([backButton, gameContent, visualizer], { clearProps: 'opacity' });
 
     // Allow new card insertion
     cardInserted = false;
@@ -808,6 +870,7 @@ const gameManager = {
 
     // Start music for this game
     musicPlayer.play(gameIndex);
+    visualizerController.start();
   },
 
   loadGame(gameIndex) {
@@ -877,8 +940,9 @@ const gameManager = {
   },
 
   destroy() {
-    // Stop music
+    // Stop music and visualizer
     musicPlayer.stop();
+    visualizerController.stop();
 
     // Stop animation loop
     if (this.animationId) {
