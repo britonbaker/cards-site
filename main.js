@@ -402,36 +402,25 @@ function getResponsiveValues() {
   const vh = window.innerHeight;
   const isLandscape = vw > vh && vh < 500;
 
-  let cardWidth, cardHeight, slotWidth;
+  let cardHeight;
 
   if (isLandscape) {
-    cardWidth = 140;
     cardHeight = 180;
-    slotWidth = 160;
   } else if (vw <= 380) {
-    cardWidth = 180;
-    cardHeight = 100;
-    slotWidth = 160;
+    cardHeight = 210;
   } else if (vw <= 600) {
-    cardWidth = 200;
-    cardHeight = 120;
-    slotWidth = 180;
-  } else if (vw <= 768) {
-    cardWidth = 180;
     cardHeight = 240;
-    slotWidth = 200;
+  } else if (vw <= 768) {
+    cardHeight = 240;
   } else {
-    cardWidth = 220;
     cardHeight = 300;
-    slotWidth = 240;
   }
 
-  // Calculate slot position - place it below center, accounting for card stack on mobile
-  const isMobileVertical = vw <= 600 && !isLandscape;
-  const slotOffset = isMobileVertical ? cardHeight * 0.6 : cardHeight * 0.6;
+  // Calculate slot position - place it below center based on card height
+  const slotOffset = cardHeight * 0.6;
   const slotTop = Math.min(vh / 2 + slotOffset, vh - 60);
 
-  return { cardWidth, cardHeight, slotWidth, slotTop, isMobileVertical, isLandscape, vw, vh };
+  return { cardHeight, slotTop, isLandscape, vw, vh };
 }
 
 function updateSlotPosition() {
@@ -462,8 +451,6 @@ function insertCard(clickedCard) {
   const slotBottom = document.querySelector('.slot-bar.bottom');
   const clickedIndex = Number(clickedCard.dataset.index);
 
-  const { isMobileVertical } = getResponsiveValues();
-
   // Update slot position for current viewport before animation
   updateSlotPosition();
 
@@ -471,8 +458,8 @@ function insertCard(clickedCard) {
   const slotRect = slotBottom.getBoundingClientRect();
   const cardRect = clickedCard.getBoundingClientRect();
 
-  // Calculate target positions - card overlaps slot by ~40px (scaled for mobile)
-  const overlapAmount = isMobileVertical ? 30 : 40;
+  // Calculate target positions - card overlaps slot by 40px
+  const overlapAmount = 40;
   const targetLeft = slotRect.left + slotRect.width / 2 - cardRect.width / 2;
   const targetTop = slotRect.top - overlapAmount;
 
@@ -610,8 +597,8 @@ function goBack() {
   const selectedIndex = Number(selectedCard.dataset.index);
 
   // Get responsive values for original positions
-  const { slotTop, isMobileVertical } = getResponsiveValues();
-  const overlapAmount = isMobileVertical ? 30 : 40;
+  const { slotTop } = getResponsiveValues();
+  const overlapAmount = 40;
   const originalSlotTop = slotTop;
   const originalCardTop = originalSlotTop - overlapAmount;
 
