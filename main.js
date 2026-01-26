@@ -138,6 +138,54 @@ const musicPlayer = {
     this.activeOscillators.push(noise);
   },
 
+  // Play a string/violin-like sound with vibrato
+  playString(freq, volume, duration, startTime) {
+    const ctx = this.audioContext;
+
+    // Main oscillator - sawtooth for rich harmonics
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.value = freq;
+
+    // Vibrato LFO
+    const vibrato = ctx.createOscillator();
+    const vibratoGain = ctx.createGain();
+    vibrato.type = 'sine';
+    vibrato.frequency.value = 5; // 5Hz vibrato rate
+    vibratoGain.gain.value = freq * 0.02; // 2% pitch variation
+    vibrato.connect(vibratoGain);
+    vibratoGain.connect(osc.frequency);
+
+    // Lowpass filter for warmth
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 2000;
+    filter.Q.value = 1;
+
+    // Gain envelope
+    const gain = ctx.createGain();
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.masterGain);
+
+    // String-like envelope: slow attack, sustain, gentle release
+    const attackTime = 0.15;
+    const releaseTime = 0.2;
+
+    gain.gain.setValueAtTime(0.001, startTime);
+    gain.gain.exponentialRampToValueAtTime(volume, startTime + attackTime);
+    gain.gain.setValueAtTime(volume, startTime + duration - releaseTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+
+    vibrato.start(startTime);
+    vibrato.stop(startTime + duration);
+    osc.start(startTime);
+    osc.stop(startTime + duration);
+
+    this.activeOscillators.push(osc, vibrato);
+  },
+
   // Cube Runner - Full band with drums
   playCubeRunner() {
     const ctx = this.audioContext;
@@ -172,6 +220,12 @@ const musicPlayer = {
     // Drum pattern (16 steps): K=kick, S=snare, H=hihat, O=open hihat
     const drums = ['K', 'H', 'H', 'H', 'S', 'H', 'K', 'H', 'K', 'H', 'H', 'H', 'S', 'H', 'O', 'H'];
 
+    // String counter-melody (8 steps per 2 bars - longer sustained notes)
+    const stringNotes = [
+      784, 0, 659, 0, 587, 0, 523, 0,  // High G, E, D, C
+      659, 0, 784, 0, 880, 0, 784, 0   // E, G, A, G
+    ];
+
     let step = 0;
     const stepDuration = barDuration / 16;
 
@@ -204,6 +258,14 @@ const musicPlayer = {
       if (drum === 'H') this.playHiHat(now, false);
       if (drum === 'O') this.playHiHat(now, true);
 
+      // Strings - play every 4 steps (quarter notes) for sustained feel
+      if (step % 4 === 0) {
+        const stringIdx = (step / 4) % stringNotes.length;
+        if (stringNotes[stringIdx] > 0) {
+          this.playString(stringNotes[stringIdx], 0.06, stepDuration * 3.5, now);
+        }
+      }
+
       step++;
     };
 
@@ -228,11 +290,19 @@ const musicPlayer = {
       [220, 277, 330],       // A minor
     ];
 
-    // High melody notes (played occasionally)
-    const melodyNotes = [587, 523, 494, 440, 494, 523, 587, 659];
+    // High melody notes - expanded with more movement
+    const melodyNotes = [587, 659, 523, 587, 494, 440, 494, 523, 587, 784, 659, 587];
+
+    // Counter melody - lower register, answers the main melody
+    const counterMelody = [294, 330, 262, 294, 247, 220, 247, 262];
+
+    // Shimmer notes - very high, sparse, ethereal
+    const shimmerNotes = [1175, 1318, 1047, 1175, 988, 880, 988, 1047];
 
     let chordIndex = 0;
     let melodyIndex = 0;
+    let counterIndex = 0;
+    let shimmerIndex = 0;
 
     const playChord = () => {
       if (!this.isPlaying) return;
@@ -247,17 +317,50 @@ const musicPlayer = {
         this.playPad(freq * 2, 'sine', 0.025, chordDuration * 0.9, now + i * 0.03);
       });
 
-      // Play melody note on some chords
-      if (chordIndex % 2 === 0) {
-        this.playPad(melodyNotes[melodyIndex], 'sine', 0.04, chordDuration * 0.7, now + 0.3);
+      // Main melody - plays on most chords now
+      if (chordIndex % 2 === 0 || chordIndex === 3 || chordIndex === 7) {
+        this.playPad(melodyNotes[melodyIndex], 'sine', 0.04, chordDuration * 0.6, now + 0.3);
         melodyIndex = (melodyIndex + 1) % melodyNotes.length;
+      }
+
+      // Counter melody - plays on off-beats, lower and softer
+      if (chordIndex % 2 === 1) {
+        this.playPad(counterMelody[counterIndex], 'triangle', 0.03, chordDuration * 0.5, now + 0.8);
+        counterIndex = (counterIndex + 1) % counterMelody.length;
+      }
+
+      // Shimmer - very quiet, high sparkle notes (every 3rd chord)
+      if (chordIndex % 3 === 0) {
+        this.playPad(shimmerNotes[shimmerIndex], 'sine', 0.015, chordDuration * 0.4, now + 1.2);
+        shimmerIndex = (shimmerIndex + 1) % shimmerNotes.length;
       }
 
       chordIndex = (chordIndex + 1) % chords.length;
     };
 
+    // Subtle percussion - soft kicks and hats
+    let drumStep = 0;
+    const playDrums = () => {
+      if (!this.isPlaying) return;
+      const now = ctx.currentTime;
+
+      // Soft kick every 4 beats
+      if (drumStep % 8 === 0) {
+        this.playKick(now);
+      }
+
+      // Soft hi-hat pattern
+      if (drumStep % 2 === 1) {
+        this.playHiHat(now, drumStep % 8 === 7); // Open hat occasionally
+      }
+
+      drumStep++;
+    };
+
     playChord();
     this.intervalIds.push(setInterval(playChord, chordDuration * 1000));
+    // Drums - 8 hits per chord cycle
+    this.intervalIds.push(setInterval(playDrums, (chordDuration / 8) * 1000));
   },
 
   // Play a pad sound with slow attack and release
