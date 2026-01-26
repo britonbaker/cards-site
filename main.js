@@ -31,7 +31,16 @@ const musicPlayer = {
   setMuted(muted) {
     this.isMuted = muted;
     if (this.outputGain) {
-      this.outputGain.gain.value = muted ? 0 : 1;
+      this.outputGain.gain.value = muted ? 0 : this.volume;
+    }
+  },
+
+  volume: 1,
+  
+  setVolume(vol) {
+    this.volume = vol;
+    if (this.outputGain && !this.isMuted) {
+      this.outputGain.gain.value = vol;
     }
   },
 
@@ -1193,15 +1202,53 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Mute button listener - show it immediately since SFX play on home page too
   const muteButton = document.querySelector('.mute-button');
+  const muteToggle = document.querySelector('.mute-toggle');
+  const volumeSlider = document.querySelector('.volume-slider');
   const visualizer = document.querySelector('.visualizer');
+  let savedVolume = 100; // Remember volume before muting
+  
   muteButton.classList.add('visible');
-  muteButton.addEventListener('click', (e) => {
+  
+  // Handle mute toggle click
+  muteToggle.addEventListener('click', (e) => {
     e.stopPropagation();
     const isMuted = muteButton.classList.toggle('muted');
     musicPlayer.setMuted(isMuted);
     sfx.setMuted(isMuted);
     visualizer.classList.toggle('muted', isMuted);
+    
+    if (isMuted) {
+      savedVolume = volumeSlider.value;
+      volumeSlider.value = 0;
+    } else {
+      volumeSlider.value = savedVolume;
+      musicPlayer.setVolume(savedVolume / 100);
+    }
   });
+  
+  // Handle volume slider input
+  volumeSlider.addEventListener('input', (e) => {
+    e.stopPropagation();
+    const volume = e.target.value / 100;
+    musicPlayer.setVolume(volume);
+    
+    // Update muted state based on volume
+    if (volume === 0) {
+      muteButton.classList.add('muted');
+      visualizer.classList.add('muted');
+      musicPlayer.setMuted(true);
+      sfx.setMuted(true);
+    } else {
+      muteButton.classList.remove('muted');
+      visualizer.classList.remove('muted');
+      musicPlayer.setMuted(false);
+      sfx.setMuted(false);
+      savedVolume = e.target.value;
+    }
+  });
+  
+  // Prevent slider from triggering parent events
+  volumeSlider.addEventListener('click', (e) => e.stopPropagation());
 
   // Handle browser back/forward buttons
   window.addEventListener('popstate', (e) => {

@@ -68,11 +68,14 @@
   <!-- Back button -->
   <button class="back-button"><i class="hgi-stroke hgi-arrow-left-01"></i></button>
 
-  <!-- Mute button -->
-  <button class="mute-button">
-    <i class="hgi-stroke hgi-volume-high mute-icon-on"></i>
-    <i class="hgi-stroke hgi-volume-off mute-icon-off"></i>
-  </button>
+  <!-- Mute button with volume slider -->
+  <div class="mute-button">
+    <button class="mute-toggle">
+      <i class="hgi-stroke hgi-volume-high mute-icon-on"></i>
+      <i class="hgi-stroke hgi-volume-off mute-icon-off"></i>
+    </button>
+    <input type="range" class="volume-slider" min="0" max="100" value="100">
+  </div>
 
   <!-- Music visualizer -->
   <div class="visualizer">
