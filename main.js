@@ -5,20 +5,33 @@
 const musicPlayer = {
   audioContext: null,
   masterGain: null,
+  outputGain: null,
   analyser: null,
   isPlaying: false,
+  isMuted: false,
   intervalIds: [],
   activeOscillators: [],
 
   init() {
     if (!this.audioContext) {
       this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      // Create master gain and analyser for visualizer
+      // Create master gain, analyser, and output gain
+      // Route: instruments -> masterGain -> analyser -> outputGain -> destination
+      // This lets us mute at outputGain while keeping analyser active for visualizer
       this.masterGain = this.audioContext.createGain();
       this.analyser = this.audioContext.createAnalyser();
+      this.outputGain = this.audioContext.createGain();
       this.analyser.fftSize = 64;
       this.masterGain.connect(this.analyser);
-      this.analyser.connect(this.audioContext.destination);
+      this.analyser.connect(this.outputGain);
+      this.outputGain.connect(this.audioContext.destination);
+    }
+  },
+
+  setMuted(muted) {
+    this.isMuted = muted;
+    if (this.outputGain) {
+      this.outputGain.gain.value = muted ? 0 : 1;
     }
   },
 
@@ -558,6 +571,7 @@ const visualizerController = {
 
 const sfx = {
   audioContext: null,
+  isMuted: false,
 
   init() {
     if (!this.audioContext) {
@@ -565,7 +579,12 @@ const sfx = {
     }
   },
 
+  setMuted(muted) {
+    this.isMuted = muted;
+  },
+
   playSlotClick(volume = 1.0, pitch = 1.0) {
+    if (this.isMuted) return;
     this.init();
 
     const ctx = this.audioContext;
@@ -605,6 +624,7 @@ const sfx = {
 
   // Subtle tick for anticipation/settle
   playSoftClick(volume = 1.0, pitch = 1.0) {
+    if (this.isMuted) return;
     this.init();
 
     const ctx = this.audioContext;
@@ -911,7 +931,8 @@ function goBack() {
 
   const tl = gsap.timeline();
 
-  // Step 1: Fade out back button, visualizer, and game content
+  // Step 1: Fade out back button, mute button, visualizer, and game content
+  // Fade out back button, visualizer, and game content (mute button stays visible)
   tl.to([backButton, visualizer, gameContent], {
     opacity: 0,
     duration: 0.2,
@@ -1107,6 +1128,35 @@ function goBack() {
   }, [], 1.45);
 }
 
+// URL routing for games
+const gameRoutes = {
+  0: 'cube-runner',
+  1: 'ring-world',
+  2: 'crystal-core'
+};
+
+const routeToIndex = {
+  'cube-runner': 0,
+  'ring-world': 1,
+  'crystal-core': 2
+};
+
+function getGameFromPath() {
+  const path = window.location.pathname.replace(/^\//, '').replace(/\/$/, '');
+  return routeToIndex[path] ?? null;
+}
+
+function updateURL(gameIndex) {
+  const slug = gameRoutes[gameIndex];
+  if (slug) {
+    history.pushState({ game: gameIndex }, '', '/' + slug);
+  }
+}
+
+function clearURL() {
+  history.pushState({ game: null }, '', '/');
+}
+
 // Add click listeners to cards after DOM loads
 document.addEventListener('DOMContentLoaded', () => {
   // Initialize slot position for current viewport
@@ -1123,8 +1173,12 @@ document.addEventListener('DOMContentLoaded', () => {
       // If this card is already selected, eject it
       if (card.classList.contains('selected')) {
         goBack();
+        clearURL();
       } else {
         insertCard(card);
+        // Update URL when card is inserted
+        const cardIndex = Number(card.dataset.index);
+        updateURL(cardIndex);
       }
     });
   });
@@ -1134,7 +1188,43 @@ document.addEventListener('DOMContentLoaded', () => {
   backButton.addEventListener('click', (e) => {
     e.stopPropagation();
     goBack();
+    clearURL();
   });
+
+  // Mute button listener - show it immediately since SFX play on home page too
+  const muteButton = document.querySelector('.mute-button');
+  const visualizer = document.querySelector('.visualizer');
+  muteButton.classList.add('visible');
+  muteButton.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isMuted = muteButton.classList.toggle('muted');
+    musicPlayer.setMuted(isMuted);
+    sfx.setMuted(isMuted);
+    visualizer.classList.toggle('muted', isMuted);
+  });
+
+  // Handle browser back/forward buttons
+  window.addEventListener('popstate', (e) => {
+    const gameIndex = e.state?.game ?? getGameFromPath();
+    if (gameIndex !== null && !cardInserted) {
+      // Navigate to game
+      const card = document.querySelector(`.card[data-index="${gameIndex}"]`);
+      if (card) insertCard(card);
+    } else if (gameIndex === null && cardInserted) {
+      // Navigate back to home
+      goBack();
+    }
+  });
+
+  // Check URL on page load and auto-select card if needed
+  const initialGame = getGameFromPath();
+  if (initialGame !== null) {
+    // Small delay to let the page initialize
+    setTimeout(() => {
+      const card = document.querySelector(`.card[data-index="${initialGame}"]`);
+      if (card) insertCard(card);
+    }, 100);
+  }
 });
 
 // ============================================
