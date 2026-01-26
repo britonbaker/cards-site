@@ -1220,8 +1220,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (isMuted) {
       savedVolume = volumeSlider.value;
       volumeSlider.value = 0;
+      volumeSlider.style.setProperty('--volume', 0);
     } else {
       volumeSlider.value = savedVolume;
+      volumeSlider.style.setProperty('--volume', savedVolume);
       musicPlayer.setVolume(savedVolume / 100);
     }
   });
@@ -1231,6 +1233,9 @@ document.addEventListener('DOMContentLoaded', () => {
     e.stopPropagation();
     const volume = e.target.value / 100;
     musicPlayer.setVolume(volume);
+    
+    // Update slider fill
+    volumeSlider.style.setProperty('--volume', e.target.value);
     
     // Update muted state based on volume
     if (volume === 0) {

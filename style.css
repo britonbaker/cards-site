@@ -514,6 +514,7 @@ html, body {
 
 /* Volume slider */
 .volume-slider {
+  --volume: 100;
   width: 0;
   height: 4px;
   margin: 0 8px 0 0;
@@ -521,7 +522,13 @@ html, body {
   cursor: pointer;
   -webkit-appearance: none;
   appearance: none;
-  background: rgba(0, 0, 0, 0.15);
+  background: linear-gradient(
+    to right,
+    #333 0%,
+    #333 calc(var(--volume) * 1%),
+    rgba(0, 0, 0, 0.15) calc(var(--volume) * 1%),
+    rgba(0, 0, 0, 0.15) 100%
+  );
   border-radius: 2px;
   transition: width 0.25s ease, opacity 0.25s ease;
 }
@@ -548,6 +555,18 @@ html, body {
   border-radius: 50%;
   border: none;
   cursor: pointer;
+}
+
+.volume-slider::-moz-range-track {
+  height: 4px;
+  background: linear-gradient(
+    to right,
+    #333 0%,
+    #333 calc(var(--volume) * 1%),
+    rgba(0, 0, 0, 0.15) calc(var(--volume) * 1%),
+    rgba(0, 0, 0, 0.15) 100%
+  );
+  border-radius: 2px;
 }
 
 /* Desktop hover: expand to show slider */
