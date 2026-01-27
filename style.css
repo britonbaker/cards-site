@@ -52,6 +52,12 @@ html, body {
   position: relative;
   overflow: hidden;
   isolation: isolate;
+  /* Fix Safari border-radius clipping during transforms */
+  -webkit-mask-image: -webkit-radial-gradient(white, black);
+  mask-image: radial-gradient(white, black);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  transform: translateZ(0);
 }
 
 .card:hover {
@@ -302,6 +308,10 @@ html, body {
 .card.inserting {
   position: fixed;
   z-index: 3;
+  /* Reinforce border-radius during animation on Safari/iOS */
+  -webkit-mask-image: -webkit-radial-gradient(white, black);
+  mask-image: radial-gradient(white, black);
+  will-change: transform, top, left;
 }
 
 /* Card with no shadow when inserted */
