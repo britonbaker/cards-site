@@ -606,7 +606,7 @@ html, body {
   height: 16px;
   background: rgba(255, 255, 255, 0.9);
   border-radius: 1.5px;
-  transform-origin: bottom;
+  transform-origin: center;
   transition: transform 0.05s ease-out, background 0.2s ease;
 }
 
