@@ -800,6 +800,7 @@ html, body {
     right: 12px;
     width: 44px;
     height: 44px;
+    justify-content: center;
   }
 
   .game-content {
