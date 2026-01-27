@@ -524,6 +524,10 @@ html, body {
   display: block;
 }
 
+.mute-button.muted .mute-toggle {
+  color: #e53935;
+}
+
 /* Volume slider */
 .volume-slider {
   --volume: 100;
