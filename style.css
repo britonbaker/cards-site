@@ -588,7 +588,7 @@ html, body {
   right: 14px;
   z-index: 10;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 2px;
   height: 16px;
   opacity: 0;
