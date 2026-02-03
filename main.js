@@ -31,7 +31,16 @@ const musicPlayer = {
   setMuted(muted) {
     this.isMuted = muted;
     if (this.outputGain) {
-      this.outputGain.gain.value = muted ? 0 : 1;
+      this.outputGain.gain.value = muted ? 0 : this.volume;
+    }
+  },
+
+  volume: 1,
+  
+  setVolume(vol) {
+    this.volume = vol;
+    if (this.outputGain && !this.isMuted) {
+      this.outputGain.gain.value = vol;
     }
   },
 
@@ -1253,15 +1262,102 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Mute button listener - show it immediately since SFX play on home page too
   const muteButton = document.querySelector('.mute-button');
+  const muteToggle = document.querySelector('.mute-toggle');
+  const volumeSlider = document.querySelector('.volume-slider');
   const visualizer = document.querySelector('.visualizer');
+  let savedVolume = 100; // Remember volume before muting
+  
   muteButton.classList.add('visible');
-  muteButton.addEventListener('click', (e) => {
+  
+  // Handle mute toggle click
+  muteToggle.addEventListener('click', (e) => {
     e.stopPropagation();
     const isMuted = muteButton.classList.toggle('muted');
     musicPlayer.setMuted(isMuted);
     sfx.setMuted(isMuted);
     visualizer.classList.toggle('muted', isMuted);
+    
+    if (isMuted) {
+      savedVolume = volumeSlider.value;
+      volumeSlider.value = 0;
+      volumeSlider.style.setProperty('--volume', 0);
+    } else {
+      volumeSlider.value = savedVolume;
+      volumeSlider.style.setProperty('--volume', savedVolume);
+      musicPlayer.setVolume(savedVolume / 100);
+    }
   });
+  
+  // Handle volume slider input
+  volumeSlider.addEventListener('input', (e) => {
+    e.stopPropagation();
+    const volume = e.target.value / 100;
+    musicPlayer.setVolume(volume);
+    
+    // Update slider fill
+    volumeSlider.style.setProperty('--volume', e.target.value);
+    
+    // Update muted state based on volume
+    if (volume === 0) {
+      muteButton.classList.add('muted');
+      visualizer.classList.add('muted');
+      musicPlayer.setMuted(true);
+      sfx.setMuted(true);
+    } else {
+      muteButton.classList.remove('muted');
+      visualizer.classList.remove('muted');
+      musicPlayer.setMuted(false);
+      sfx.setMuted(false);
+      savedVolume = e.target.value;
+    }
+  });
+  
+  // Prevent slider from triggering parent events
+  volumeSlider.addEventListener('click', (e) => e.stopPropagation());
+
+  // Mobile: tap to expand volume slider, auto-collapse after delay
+  let collapseTimeout = null;
+  const isMobile = window.matchMedia('(max-width: 768px)').matches;
+  
+  function collapseVolumeSlider() {
+    muteButton.classList.remove('expanded');
+  }
+  
+  function resetCollapseTimer() {
+    if (collapseTimeout) clearTimeout(collapseTimeout);
+    collapseTimeout = setTimeout(collapseVolumeSlider, 3000);
+  }
+  
+  if (isMobile) {
+    muteButton.addEventListener('click', (e) => {
+      // Only expand if clicking the container (not the toggle or slider)
+      if (e.target === muteButton) {
+        muteButton.classList.add('expanded');
+        resetCollapseTimer();
+      }
+    });
+    
+    // Keep open while sliding
+    volumeSlider.addEventListener('input', () => {
+      resetCollapseTimer();
+    });
+    
+    volumeSlider.addEventListener('touchstart', () => {
+      if (collapseTimeout) clearTimeout(collapseTimeout);
+    });
+    
+    volumeSlider.addEventListener('touchend', () => {
+      resetCollapseTimer();
+    });
+    
+    // Also expand when tapping the mute toggle
+    muteToggle.addEventListener('click', () => {
+      if (!muteButton.classList.contains('expanded')) {
+        muteButton.classList.add('expanded');
+      }
+      resetCollapseTimer();
+    });
+  }
 
   // Handle browser back/forward buttons
   window.addEventListener('popstate', (e) => {

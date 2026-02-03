@@ -93,68 +93,6 @@
   <!-- Game content area -->
   <div class="game-content">
     <canvas id="game-canvas"></canvas>
-    <!-- Piano roll overlay (Crystal Core only) -->
-    <div class="piano-roll" id="piano-roll">
-      <div class="piano-roll-visualizer">
-        <canvas id="piano-roll-canvas"></canvas>
-      </div>
-      <div class="piano-roll-editor">
-      <div class="piano-roll-header">
-        <span class="piano-roll-title">Crystal Core</span>
-        <button class="piano-roll-close">✕</button>
-      </div>
-      <div class="piano-roll-controls">
-        <div class="transport-controls">
-          <button class="piano-roll-btn primary" id="piano-roll-play" title="Play/Pause (Space)">▶</button>
-          <button class="piano-roll-btn" id="piano-roll-random" title="Shuffle">⟳</button>
-        </div>
-        
-        <div class="piano-roll-tempo-wrap">
-          <input type="range" id="piano-roll-tempo" min="60" max="200" value="160">
-          <span class="piano-roll-tempo-val" id="piano-roll-tempo-val">160</span>
-        </div>
-        
-        <div class="piano-roll-length-wrap">
-          <button class="piano-roll-btn-sm" id="piano-roll-shrink" title="Shorter">−</button>
-          <span class="piano-roll-length-val" id="piano-roll-length-val">12</span>
-          <button class="piano-roll-btn-sm" id="piano-roll-grow" title="Longer">+</button>
-        </div>
-        
-        <button class="piano-roll-btn piano-roll-secondary" id="piano-roll-reset" title="Reset">↺</button>
-        <button class="piano-roll-btn piano-roll-clear" id="piano-roll-clear">Clear</button>
-      </div>
-      <div class="piano-roll-grid" id="piano-roll-grid"></div>
-      <div class="piano-roll-footer">
-        <div class="piano-roll-mutes">
-          <label class="mute-toggle">
-            <input type="checkbox" id="mute-melody" checked>
-            <span>Melody</span>
-          </label>
-          <select id="melody-instrument" class="instrument-select">
-            <option value="sawtooth">◢ Saw</option>
-            <option value="square">◻ Square</option>
-            <option value="triangle">△ Tri</option>
-            <option value="sine">∿ Sine</option>
-          </select>
-          <label class="mute-toggle">
-            <input type="checkbox" id="mute-drums" checked>
-            <span>Drums</span>
-          </label>
-          <label class="mute-toggle bass-toggle">
-            <input type="checkbox" id="mute-bass" checked>
-            <span>Bass</span>
-          </label>
-          <select id="bass-instrument" class="instrument-select bass-select">
-            <option value="triangle">△ Tri</option>
-            <option value="sawtooth">◢ Saw</option>
-            <option value="square">◻ Square</option>
-            <option value="sine">∿ Sine</option>
-          </select>
-        </div>
-        <span class="piano-roll-hint">Shift+click = slide</span>
-      </div>
-      </div>
-    </div>
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
