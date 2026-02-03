@@ -938,6 +938,801 @@ html, body {
   }
 }
 
+/* ============================================
+   PIANO ROLL / MIDI EDITOR
+   ============================================ */
+
+.piano-roll {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(180deg, #0f0f1a 0%, #1a1a2e 100%);
+  z-index: 100;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.piano-roll.visible {
+  display: flex;
+}
+
+/* Top 1/3 - 3D visualizer */
+.piano-roll-visualizer {
+  flex: 0 0 30%;
+  min-height: 150px;
+  position: relative;
+  background: radial-gradient(ellipse at center, rgba(255, 107, 107, 0.15) 0%, rgba(255, 80, 80, 0.05) 40%, transparent 70%);
+}
+
+.piano-roll-visualizer::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 200px;
+  height: 200px;
+  background: radial-gradient(circle, rgba(255, 107, 107, 0.3) 0%, transparent 70%);
+  pointer-events: none;
+  animation: visualizerGlow 2s ease-in-out infinite;
+}
+
+@keyframes visualizerGlow {
+  0%, 100% { opacity: 0.5; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 0.8; transform: translate(-50%, -50%) scale(1.1); }
+}
+
+#piano-roll-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Bottom 2/3 - editor */
+.piano-roll-editor {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 24px 24px 0 0;
+  margin-top: -20px;
+  position: relative;
+  z-index: 1;
+}
+
+.piano-roll-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: transparent;
+  flex-shrink: 0;
+}
+
+.piano-roll-title {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+  font-size: 18px;
+  font-weight: 600;
+  color: white;
+  letter-spacing: -0.3px;
+}
+
+.piano-roll-close {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.piano-roll-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.05);
+}
+
+/* Piano roll controls bar - Apple-style clean toolbar */
+.piano-roll-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: transparent;
+  flex-shrink: 0;
+}
+
+/* Transport controls (play, etc) - centered pill */
+.transport-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  padding: 4px;
+}
+
+.piano-roll-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 16px;
+  padding: 10px 14px;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.piano-roll-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.piano-roll-btn:active {
+  transform: scale(0.95);
+}
+
+.piano-roll-btn.primary {
+  background: #ff6b6b;
+  color: white;
+}
+
+.piano-roll-btn.primary:hover {
+  background: #ff8080;
+}
+
+/* Tempo control - minimal */
+.piano-roll-tempo-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 8px 14px;
+}
+
+.piano-roll-label {
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+  font-weight: 500;
+}
+
+.piano-roll-tempo-val {
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  color: white;
+  min-width: 32px;
+}
+
+#piano-roll-tempo {
+  width: 80px;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+#piano-roll-tempo::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: white;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+
+#piano-roll-tempo::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+#piano-roll-tempo::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: white;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+}
+
+/* Length controls - pill style */
+.piano-roll-length-wrap {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 4px;
+}
+
+.piano-roll-length-val {
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  min-width: 28px;
+  text-align: center;
+  padding: 0 4px;
+}
+
+.piano-roll-btn-sm {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 18px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.piano-roll-btn-sm:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.piano-roll-secondary {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
+}
+
+.piano-roll-secondary:hover {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.piano-roll-clear {
+  color: #ff6b6b;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.piano-roll-grid {
+  display: grid;
+  gap: 3px;
+  padding: 0 20px 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* Step number header row - minimal */
+.step-number {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.25);
+  user-select: none;
+}
+
+.step-number.beat-start {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.header-spacer {
+  height: 24px;
+  background: transparent;
+}
+
+/* Piano key labels on left - cleaner */
+.piano-roll-row {
+  display: contents;
+}
+
+.piano-key {
+  width: 44px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 10px;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.4);
+  background: transparent;
+  border-radius: 6px 0 0 6px;
+  transition: all 0.15s ease;
+  user-select: none;
+  cursor: pointer;
+}
+
+.piano-key:hover {
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.piano-key:active {
+  background: rgba(255, 107, 107, 0.2);
+}
+
+.piano-key.sharp {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.piano-key.sharp:hover {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Note cells - larger, touch-friendly */
+.note-cell {
+  height: 32px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.note-cell:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.note-cell.active {
+  background: linear-gradient(135deg, #ff6b6b 0%, #e85d5d 100%);
+  box-shadow: 0 2px 12px rgba(255, 107, 107, 0.4);
+  border-radius: 6px;
+  animation: notePopIn 0.15s ease-out;
+}
+
+.note-cell.active:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 16px rgba(255, 107, 107, 0.5);
+}
+
+@keyframes notePopIn {
+  0% { transform: scale(0.8); opacity: 0.5; }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Slide/bend indicator - glowing curve */
+.note-cell.active.slide {
+  position: relative;
+  overflow: visible;
+}
+
+.note-cell.active.slide::after {
+  content: '';
+  position: absolute;
+  right: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  background: linear-gradient(135deg, transparent 40%, currentColor 50%, transparent 60%);
+  border-radius: 0 50% 50% 0;
+  opacity: 0.9;
+  z-index: 10;
+  animation: slidePulse 0.8s ease-in-out infinite;
+}
+
+.note-cell.active.slide::before {
+  content: '~';
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 16px;
+  font-weight: bold;
+  color: white;
+  text-shadow: 0 0 8px currentColor;
+  z-index: 11;
+}
+
+@keyframes slidePulse {
+  0%, 100% { opacity: 0.7; transform: translateY(-50%) scale(1); }
+  50% { opacity: 1; transform: translateY(-50%) scale(1.2); }
+}
+
+/* Playhead indicator - animated glow */
+.note-cell.playhead {
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.5);
+  animation: playheadPulse 0.3s ease-out;
+}
+
+.note-cell.playhead.active {
+  box-shadow: 0 0 20px rgba(255, 107, 107, 0.7);
+  transform: scale(1.1);
+  animation: playheadActive 0.15s ease-out;
+}
+
+@keyframes playheadPulse {
+  0% { box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.8); }
+  100% { box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.5); }
+}
+
+@keyframes playheadActive {
+  0% { transform: scale(1.2); box-shadow: 0 0 30px rgba(255, 107, 107, 0.9); }
+  100% { transform: scale(1.1); box-shadow: 0 0 20px rgba(255, 107, 107, 0.7); }
+}
+
+/* Beat markers (every 4th column) */
+.note-cell.beat-start {
+  border-left: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* Footer with mutes - pill toggles */
+.piano-roll-footer {
+  padding: 16px 20px;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.piano-roll-mutes {
+  display: flex;
+  gap: 8px;
+}
+
+.mute-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.8);
+  user-select: none;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 8px 14px;
+  border-radius: 20px;
+  transition: all 0.2s ease;
+}
+
+.mute-toggle:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.mute-toggle input[type="checkbox"] {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  position: relative;
+  background: rgba(255, 255, 255, 0.2);
+  transition: all 0.15s ease;
+}
+
+.mute-toggle input[type="checkbox"]:checked {
+  background: #ff6b6b;
+}
+
+.mute-toggle.bass-toggle input[type="checkbox"]:checked {
+  background: #a855f7;
+}
+
+/* Instrument selector dropdowns */
+.instrument-select {
+  appearance: none;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  border-radius: 12px;
+  padding: 6px 12px;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.instrument-select:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.instrument-select:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 107, 107, 0.4);
+}
+
+.instrument-select option {
+  background: #1a1a2e;
+  color: white;
+}
+
+.instrument-select.bass-select:focus {
+  box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.4);
+}
+
+.mute-toggle input[type="checkbox"]:checked::after {
+  content: '✓';
+  position: absolute;
+  top: 1px;
+  left: 4px;
+  font-size: 12px;
+  color: white;
+  font-weight: bold;
+}
+
+.mute-toggle:has(input:not(:checked)) {
+  opacity: 0.5;
+}
+
+.mute-toggle:has(input:not(:checked)) span {
+  text-decoration: line-through;
+}
+
+.piano-roll-hint {
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+/* Scale highlighting - dim out-of-scale notes */
+.note-cell.out-of-scale {
+  opacity: 0.4;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.note-cell.out-of-scale:hover {
+  opacity: 0.7;
+}
+
+/* Octave color coding - subtle tints */
+.piano-key.octave-4 {
+  color: rgba(96, 165, 250, 0.8);
+}
+
+.piano-key.octave-5 {
+  color: rgba(251, 191, 36, 0.8);
+}
+
+.note-cell.octave-4.active {
+  background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+}
+
+.note-cell.octave-5.active {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+}
+
+/* Track divider - minimal */
+.track-divider {
+  grid-column: 1;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 12px 10px 6px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.track-divider-cell {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 12px 0 6px;
+  border-radius: 1px;
+}
+
+/* Drum track styling - cleaner */
+.drum-key {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  background: transparent;
+  height: 28px;
+}
+
+.drum-cell {
+  height: 28px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.drum-cell:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.drum-cell.active {
+  background: var(--drum-color, #ff6b6b);
+  border-radius: 6px;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--drum-color, #ff6b6b) 40%, transparent);
+  animation: notePopIn 0.15s ease-out;
+}
+
+.drum-cell.active:hover {
+  transform: scale(1.05);
+}
+
+.drum-cell.beat-start {
+  border-left: none;
+}
+
+/* Playhead for drums */
+.drum-cell.playhead {
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.6);
+}
+
+/* Bass track styling - purple theme */
+.bass-key {
+  font-size: 10px;
+  color: rgba(168, 85, 247, 0.8);
+  background: transparent;
+  height: 28px;
+}
+
+.bass-cell {
+  height: 28px;
+  background: rgba(168, 85, 247, 0.03);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.bass-cell:hover {
+  background: rgba(168, 85, 247, 0.1);
+}
+
+.bass-cell.active {
+  background: linear-gradient(135deg, #a855f7 0%, #9333ea 100%);
+  border-radius: 6px;
+  box-shadow: 0 2px 12px rgba(168, 85, 247, 0.4);
+  animation: notePopIn 0.15s ease-out;
+}
+
+.bass-cell.active:hover {
+  transform: scale(1.05);
+}
+
+.bass-cell.playhead {
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.6);
+}
+
+/* Mobile responsive styles */
+@media (max-width: 768px) {
+  .piano-roll-visualizer {
+    flex: 0 0 25%;
+    min-height: 120px;
+  }
+  
+  .piano-roll-editor {
+    border-radius: 16px 16px 0 0;
+  }
+  
+  .piano-roll-header {
+    padding: 12px 16px;
+  }
+  
+  .piano-roll-title {
+    font-size: 16px;
+  }
+  
+  .piano-roll-controls {
+    padding: 8px 12px;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  
+  .transport-controls {
+    padding: 4px;
+    gap: 2px;
+  }
+  
+  #piano-roll-play {
+    width: 36px;
+    height: 36px;
+    font-size: 14px;
+  }
+  
+  #piano-roll-random {
+    width: 32px;
+    height: 32px;
+    font-size: 14px;
+  }
+  
+  .piano-roll-tempo input[type="range"] {
+    width: 60px;
+  }
+  
+  .piano-roll-grid {
+    padding: 8px;
+    gap: 3px;
+  }
+  
+  .note-cell, .drum-cell, .bass-cell {
+    height: 24px;
+  }
+  
+  .piano-key {
+    width: 32px;
+    font-size: 9px;
+    padding-right: 6px;
+  }
+  
+  .step-number {
+    font-size: 8px;
+    height: 18px;
+  }
+  
+  .piano-roll-footer {
+    padding: 10px 12px;
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  
+  .piano-roll-mutes {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  
+  .mute-toggle {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+  
+  .piano-roll-hint {
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .piano-roll-visualizer {
+    flex: 0 0 20%;
+    min-height: 100px;
+  }
+  
+  .note-cell, .drum-cell, .bass-cell {
+    height: 20px;
+    border-radius: 4px;
+  }
+  
+  .piano-key {
+    width: 28px;
+    font-size: 8px;
+  }
+  
+  .track-divider {
+    font-size: 8px;
+    padding: 8px 6px 4px;
+  }
+}
+
 /* Hidden build number - shows on hover over bottom-left corner */
 .build-hover-area {
   position: fixed;

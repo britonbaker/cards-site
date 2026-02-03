@@ -44,14 +44,20 @@ const musicPlayer = {
     }
   },
 
-  // Play a single note
-  playNote(freq, type, volume, duration, startTime) {
+  // Play a single note (with optional slide to target frequency)
+  playNote(freq, type, volume, duration, startTime, slideToFreq = null) {
     const ctx = this.audioContext;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
 
     osc.type = type;
-    osc.frequency.value = freq;
+    osc.frequency.setValueAtTime(freq, startTime);
+    
+    // If sliding, ramp frequency to target over the note duration
+    if (slideToFreq && slideToFreq !== freq) {
+      osc.frequency.exponentialRampToValueAtTime(slideToFreq, startTime + duration * 0.8);
+    }
+    
     osc.connect(gain);
     gain.connect(this.masterGain);
 
@@ -414,25 +420,76 @@ const musicPlayer = {
   // Crystal Core - Energetic, intense
   playCrystalCore() {
     const ctx = this.audioContext;
-    const tempo = 160;
+    const tempo = pianoRoll.tempo || 160;
     const stepDuration = (60 / tempo) / 2;
 
-    const notes = [330, 392, 494, 392, 330, 294, 330, 392, 494, 587, 494, 392];
+    // Use piano roll notes if available (allows live editing)
+    const getNote = (idx) => {
+      if (pianoRoll.notes && pianoRoll.notes.length > 0) {
+        return pianoRoll.notes[idx % pianoRoll.notes.length];
+      }
+      // Fallback
+      const defaultNotes = [330, 392, 494, 392, 330, 294, 330, 392, 494, 587, 494, 392];
+      return defaultNotes[idx % defaultNotes.length];
+    };
+    
     let step = 0;
+    const numSteps = pianoRoll.notes?.length || 12;
 
     const playStep = () => {
       if (!this.isPlaying) return;
       const now = ctx.currentTime;
-      const noteIdx = step % notes.length;
+      const noteIdx = step % numSteps;
+      const freq = getNote(noteIdx);
 
-      this.playNote(notes[noteIdx], 'sawtooth', 0.08, stepDuration * 0.7, now);
+      // Update piano roll playhead and visualizer
+      if (pianoRoll.visible) {
+        pianoRoll.updatePlayhead(noteIdx);
+        // Pulse visualizer on beats
+        const drumType = pianoRoll.drums?.[noteIdx] || '';
+        const bassFreq = pianoRoll.bass?.[noteIdx] || 0;
+        
+        // Trigger all visualizer effects
+        pianoRollVisualizer.onStep(freq, drumType, bassFreq);
+        
+        if (drumType || freq > 0 || bassFreq > 0) {
+          pianoRollVisualizer.beatPulse(drumType === 'K', bassFreq > 0);
+        }
+      }
 
-      // Add kick on every 4th step
-      if (step % 4 === 0) this.playKick(now);
-      // Add snare on every 8th step offset by 4
-      if (step % 8 === 4) this.playSnare(now);
-      // Hi-hat on every other step
-      if (step % 2 === 1) this.playHiHat(now);
+      // Only play note if frequency > 0 (0 = rest) and not muted
+      if (freq > 0 && !pianoRoll.melodyMuted) {
+        // Check if this note has a slide - bend to next note's frequency
+        const hasSlide = pianoRoll.slides?.[noteIdx];
+        let slideTarget = null;
+        if (hasSlide) {
+          // Find next non-zero note frequency
+          const nextIdx = (noteIdx + 1) % numSteps;
+          const nextFreq = getNote(nextIdx);
+          if (nextFreq > 0) {
+            slideTarget = nextFreq;
+          }
+        }
+        const melodyWave = pianoRoll.melodyInstrument || 'sawtooth';
+        this.playNote(freq, melodyWave, 0.08, stepDuration * 0.7, now, slideTarget);
+      }
+
+      // Play drums from pianoRoll.drums array (if not muted)
+      if (!pianoRoll.drumsMuted) {
+        const drum = pianoRoll.drums?.[noteIdx] || '';
+        if (drum === 'K') this.playKick(now);
+        if (drum === 'S') this.playSnare(now);
+        if (drum === 'H') this.playHiHat(now);
+      }
+      
+      // Play bass from pianoRoll.bass array (if not muted)
+      if (!pianoRoll.bassMuted) {
+        const bassFreq = pianoRoll.bass?.[noteIdx] || 0;
+        if (bassFreq > 0) {
+          const bassWave = pianoRoll.bassInstrument || 'triangle';
+          this.playNote(bassFreq, bassWave, 0.12, stepDuration * 0.8, now);
+        }
+      }
 
       step++;
     };
@@ -1168,6 +1225,9 @@ function clearURL() {
 
 // Add click listeners to cards after DOM loads
 document.addEventListener('DOMContentLoaded', () => {
+  // Initialize piano roll
+  pianoRoll.init();
+  
   // Initialize slot position for current viewport
   updateSlotPosition();
 
@@ -1324,6 +1384,1394 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ============================================
+// PIANO ROLL 3D VISUALIZER
+// ============================================
+
+const pianoRollVisualizer = {
+  renderer: null,
+  scene: null,
+  camera: null,
+  mesh: null,
+  particles: null,
+  rings: [],
+  freqBars: [],
+  orbitTrail: null,
+  trailPositions: [],
+  animationId: null,
+  targetScale: 1,
+  currentScale: 1,
+  targetRotationSpeed: 0.01,
+  glowIntensity: 0,
+  hue: 0,
+  targetHue: 0,
+  barHeights: [], // frequency bars (initialized in createFreqBars)
+  shapeIndex: 0,
+  morphProgress: 0,
+  shapes: ['icosahedron', 'octahedron', 'dodecahedron', 'torus', 'torusKnot'],
+  lastShapeChange: 0,
+  isTransitioning: false,
+  transitionPhase: 0, // 0=idle, 1=shrinking, 2=swapping, 3=growing
+  transitionSpeed: 0.08,
+  
+  init() {
+    const canvas = document.getElementById('piano-roll-canvas');
+    if (!canvas || this.renderer) return;
+    
+    const container = canvas.parentElement;
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+    
+    // Renderer
+    this.renderer = new THREE.WebGLRenderer({ 
+      canvas, 
+      antialias: true,
+      alpha: true 
+    });
+    this.renderer.setSize(width, height);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setClearColor(0x000000, 0);
+    
+    // Scene
+    this.scene = new THREE.Scene();
+    
+    // Camera
+    this.camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 1000);
+    this.camera.position.set(0, 0, 5);
+    
+    // Main shape (starts as icosahedron, morphs to others)
+    const geometry = new THREE.IcosahedronGeometry(1.2, 1);
+    const material = new THREE.MeshBasicMaterial({ 
+      color: 0xff6b6b, 
+      wireframe: true,
+      transparent: true,
+      opacity: 0.9
+    });
+    this.mesh = new THREE.Mesh(geometry, material);
+    this.scene.add(this.mesh);
+    this.lastShapeChange = Date.now();
+    
+    // Particle system for note hits
+    this.createParticles();
+    
+    // Frequency bars (EQ visualizer)
+    this.createFreqBars();
+    
+    // Orbit trail
+    this.createOrbitTrail();
+    
+    // Start animation
+    this.animate();
+  },
+  
+  createFreqBars() {
+    const barCount = 64; // Even more bars for ultra-wide
+    const barWidth = 0.18;
+    const spacing = 0.19;
+    const startX = -((barCount - 1) * spacing) / 2;
+    
+    for (let i = 0; i < barCount; i++) {
+      const geometry = new THREE.PlaneGeometry(barWidth, 0.01);
+      const material = new THREE.MeshBasicMaterial({
+        color: 0xff6b6b,
+        transparent: true,
+        opacity: 0.4,
+        side: THREE.DoubleSide
+      });
+      const bar = new THREE.Mesh(geometry, material);
+      bar.position.set(startX + i * spacing, -2.0, -1.5); // Behind the shape
+      bar.rotation.x = -0.2; // Slight tilt for depth
+      this.scene.add(bar);
+      this.freqBars.push(bar);
+    }
+    this.barHeights = new Array(barCount).fill(0);
+  },
+  
+  createOrbitTrail() {
+    const trailLength = 50;
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(trailLength * 3);
+    
+    for (let i = 0; i < trailLength; i++) {
+      positions[i * 3] = 0;
+      positions[i * 3 + 1] = 0;
+      positions[i * 3 + 2] = 0;
+      this.trailPositions.push({ x: 0, y: 0, z: 0 });
+    }
+    
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    
+    const material = new THREE.LineBasicMaterial({
+      color: 0xff6b6b,
+      transparent: true,
+      opacity: 0.6
+    });
+    
+    this.orbitTrail = new THREE.Line(geometry, material);
+    this.scene.add(this.orbitTrail);
+  },
+  
+  createParticles() {
+    const particleCount = 50;
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(particleCount * 3);
+    const velocities = [];
+    
+    for (let i = 0; i < particleCount; i++) {
+      positions[i * 3] = 0;
+      positions[i * 3 + 1] = 0;
+      positions[i * 3 + 2] = 0;
+      velocities.push({ x: 0, y: 0, z: 0, life: 0 });
+    }
+    
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    
+    const material = new THREE.PointsMaterial({
+      color: 0xff6b6b,
+      size: 0.08,
+      transparent: true,
+      opacity: 0.8
+    });
+    
+    this.particles = new THREE.Points(geometry, material);
+    this.particles.velocities = velocities;
+    this.particles.nextIdx = 0;
+    this.scene.add(this.particles);
+  },
+  
+  emitParticles(count = 5, color = 0xff6b6b) {
+    if (!this.particles) return;
+    const positions = this.particles.geometry.attributes.position.array;
+    const velocities = this.particles.velocities;
+    
+    for (let i = 0; i < count; i++) {
+      const idx = this.particles.nextIdx;
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 0.02 + Math.random() * 0.03;
+      
+      positions[idx * 3] = 0;
+      positions[idx * 3 + 1] = 0;
+      positions[idx * 3 + 2] = 0;
+      
+      velocities[idx] = {
+        x: Math.cos(angle) * speed,
+        y: Math.sin(angle) * speed,
+        z: (Math.random() - 0.5) * speed,
+        life: 1
+      };
+      
+      this.particles.nextIdx = (idx + 1) % velocities.length;
+    }
+    this.particles.material.color.setHex(color);
+    this.particles.geometry.attributes.position.needsUpdate = true;
+  },
+  
+  addRing() {
+    const geometry = new THREE.RingGeometry(1.3, 1.35, 32);
+    const material = new THREE.MeshBasicMaterial({
+      color: 0xff6b6b,
+      transparent: true,
+      opacity: 0.8,
+      side: THREE.DoubleSide
+    });
+    const ring = new THREE.Mesh(geometry, material);
+    ring.scale.set(0.1, 0.1, 0.1);
+    ring.userData = { expanding: true };
+    this.scene.add(ring);
+    this.rings.push(ring);
+  },
+  
+  morphToNextShape() {
+    if (!this.mesh || this.isTransitioning) return;
+    
+    // Start transition animation
+    this.isTransitioning = true;
+    this.transitionPhase = 1; // Start shrinking
+    this.lastShapeChange = Date.now();
+  },
+  
+  getGeometryForShape(shapeName) {
+    switch (shapeName) {
+      case 'icosahedron':
+        return new THREE.IcosahedronGeometry(1.2, 1);
+      case 'octahedron':
+        return new THREE.OctahedronGeometry(1.3, 0);
+      case 'dodecahedron':
+        return new THREE.DodecahedronGeometry(1.1, 0);
+      case 'torus':
+        return new THREE.TorusGeometry(0.9, 0.4, 8, 16);
+      case 'torusKnot':
+        return new THREE.TorusKnotGeometry(0.7, 0.25, 64, 8);
+      default:
+        return new THREE.IcosahedronGeometry(1.2, 1);
+    }
+  },
+  
+  updateTransition() {
+    if (!this.isTransitioning) return;
+    
+    const speed = this.transitionSpeed;
+    
+    if (this.transitionPhase === 1) {
+      // Shrinking phase - scale down and spin fast
+      this.morphProgress += speed;
+      this.mesh.scale.setScalar(Math.max(0.01, 1 - this.morphProgress));
+      this.mesh.rotation.y += 0.15; // Fast spin
+      this.mesh.rotation.x += 0.1;
+      
+      if (this.morphProgress >= 1) {
+        // Swap geometry at smallest point
+        this.transitionPhase = 2;
+        this.morphProgress = 0;
+        
+        // Change to next shape
+        this.shapeIndex = (this.shapeIndex + 1) % this.shapes.length;
+        const shapeName = this.shapes[this.shapeIndex];
+        this.mesh.geometry.dispose();
+        this.mesh.geometry = this.getGeometryForShape(shapeName);
+        
+        // Burst effect
+        this.emitParticles(15);
+        this.addRing();
+      }
+    } else if (this.transitionPhase === 2) {
+      // Growing phase - scale back up
+      this.morphProgress += speed;
+      this.mesh.scale.setScalar(Math.min(1, this.morphProgress));
+      this.mesh.rotation.y += 0.08; // Slower spin as it grows
+      this.mesh.rotation.x += 0.05;
+      
+      if (this.morphProgress >= 1) {
+        // Transition complete
+        this.transitionPhase = 0;
+        this.morphProgress = 0;
+        this.isTransitioning = false;
+        this.mesh.scale.setScalar(1);
+      }
+    }
+  },
+  
+  animate() {
+    if (!this.renderer) return;
+    
+    this.animationId = requestAnimationFrame(() => this.animate());
+    
+    // Only apply normal scale/rotation when not transitioning
+    if (!this.isTransitioning) {
+      // Smooth scale transitions
+      this.currentScale += (this.targetScale - this.currentScale) * 0.1;
+      this.mesh.scale.setScalar(this.currentScale);
+      
+      // Rotation
+      this.mesh.rotation.x += this.targetRotationSpeed;
+      this.mesh.rotation.y += this.targetRotationSpeed * 0.7;
+    }
+    
+    // Smooth color shift
+    this.hue += (this.targetHue - this.hue) * 0.1;
+    const meshColor = new THREE.Color().setHSL(this.hue, 0.7, 0.6);
+    
+    // Handle shape transition animation
+    this.updateTransition();
+    
+    // Morph shape every 8 seconds (only if not currently transitioning)
+    if (!this.isTransitioning && Date.now() - this.lastShapeChange > 8000) {
+      this.morphToNextShape();
+    }
+    this.mesh.material.color.copy(meshColor);
+    
+    // Glow decay
+    this.glowIntensity *= 0.95;
+    this.mesh.material.opacity = 0.7 + this.glowIntensity * 0.3;
+    
+    // Animate particles
+    if (this.particles) {
+      const positions = this.particles.geometry.attributes.position.array;
+      const velocities = this.particles.velocities;
+      for (let i = 0; i < velocities.length; i++) {
+        if (velocities[i].life > 0) {
+          positions[i * 3] += velocities[i].x;
+          positions[i * 3 + 1] += velocities[i].y;
+          positions[i * 3 + 2] += velocities[i].z;
+          velocities[i].life -= 0.02;
+        }
+      }
+      this.particles.geometry.attributes.position.needsUpdate = true;
+      this.particles.material.opacity = 0.6;
+    }
+    
+    // Animate expanding rings
+    for (let i = this.rings.length - 1; i >= 0; i--) {
+      const ring = this.rings[i];
+      ring.scale.x += 0.03;
+      ring.scale.y += 0.03;
+      ring.material.opacity -= 0.02;
+      if (ring.material.opacity <= 0) {
+        this.scene.remove(ring);
+        ring.geometry.dispose();
+        ring.material.dispose();
+        this.rings.splice(i, 1);
+      }
+    }
+    
+    // Animate frequency bars (decay toward 0) - match mesh color
+    for (let i = 0; i < this.freqBars.length; i++) {
+      this.barHeights[i] *= 0.92; // Decay
+      const bar = this.freqBars[i];
+      const height = Math.max(0.01, this.barHeights[i]);
+      bar.scale.y = height * 150;
+      bar.position.y = -2.2 + height * 0.75;
+      bar.material.color.copy(meshColor);
+      bar.material.opacity = 0.3 + height * 0.4;
+    }
+    
+    // Particles match mesh color
+    if (this.particles) {
+      this.particles.material.color.copy(meshColor);
+    }
+    
+    // Update orbit trail
+    if (this.orbitTrail && this.mesh) {
+      // Add current mesh position to trail
+      const vertex = this.mesh.geometry.attributes.position.array;
+      const worldPos = new THREE.Vector3(vertex[0], vertex[1], vertex[2]);
+      worldPos.applyMatrix4(this.mesh.matrixWorld);
+      
+      // Shift trail positions
+      this.trailPositions.unshift({ 
+        x: Math.sin(Date.now() * 0.002) * 1.5,
+        y: Math.cos(Date.now() * 0.0015) * 0.8,
+        z: Math.sin(Date.now() * 0.001) * 0.5
+      });
+      this.trailPositions.pop();
+      
+      // Update trail geometry
+      const positions = this.orbitTrail.geometry.attributes.position.array;
+      for (let i = 0; i < this.trailPositions.length; i++) {
+        positions[i * 3] = this.trailPositions[i].x;
+        positions[i * 3 + 1] = this.trailPositions[i].y;
+        positions[i * 3 + 2] = this.trailPositions[i].z;
+      }
+      this.orbitTrail.geometry.attributes.position.needsUpdate = true;
+      this.orbitTrail.material.color.copy(meshColor);
+    }
+    
+    this.renderer.render(this.scene, this.camera);
+  },
+  
+  // Called when a note is played
+  pulse(intensity = 0.3, color = 0xff6b6b) {
+    this.targetScale = 1 + intensity;
+    this.glowIntensity = 1;
+    this.emitParticles(3, color);
+    setTimeout(() => {
+      this.targetScale = 1;
+    }, 100);
+  },
+  
+  // Called when editing (adding/removing notes)
+  react(freq) {
+    // Higher notes = faster rotation, lower = slower
+    const normalizedFreq = Math.min(1, Math.max(0, (freq - 200) / 600));
+    this.targetRotationSpeed = 0.005 + normalizedFreq * 0.02;
+    
+    // Color shift based on frequency
+    this.targetHue = normalizedFreq * 0.15; // Red to orange-yellow range
+    
+    // Trigger frequency bar
+    const barIdx = Math.floor(normalizedFreq * 7);
+    this.triggerBar(barIdx, 0.8);
+    
+    this.pulse(0.2);
+    this.addRing();
+  },
+  
+  // Trigger a frequency bar
+  triggerBar(index, intensity = 1) {
+    if (index >= 0 && index < this.barHeights.length) {
+      this.barHeights[index] = Math.min(1.5, this.barHeights[index] + intensity);
+    }
+  },
+  
+  // Called on each playback step with note info
+  onStep(melodyFreq, drumType, bassFreq) {
+    const barCount = this.freqBars.length;
+    
+    // Color shift based on melody
+    if (melodyFreq > 0) {
+      const normalizedFreq = Math.min(1, Math.max(0, (melodyFreq - 200) / 600));
+      this.targetHue = normalizedFreq * 0.15;
+      // Map melody to mid-high freq bars (spread across multiple)
+      const centerBar = Math.floor(barCount * 0.5 + normalizedFreq * barCount * 0.4);
+      for (let i = -2; i <= 2; i++) {
+        this.triggerBar(centerBar + i, 0.7 - Math.abs(i) * 0.15);
+      }
+    }
+    
+    // Drums hit lower bars (spread wide for kick)
+    if (drumType === 'K') {
+      for (let i = 0; i < barCount; i++) {
+        const dist = Math.abs(i - barCount/2) / (barCount/2);
+        this.triggerBar(i, 1.0 * (1 - dist * 0.5));
+      }
+    } else if (drumType === 'S') {
+      for (let i = Math.floor(barCount * 0.2); i < Math.floor(barCount * 0.8); i++) {
+        this.triggerBar(i, 0.6);
+      }
+    } else if (drumType === 'H') {
+      for (let i = Math.floor(barCount * 0.6); i < barCount; i++) {
+        this.triggerBar(i, 0.4);
+      }
+    }
+    
+    // Bass hits low-mid bars
+    if (bassFreq > 0) {
+      for (let i = 0; i < Math.floor(barCount * 0.4); i++) {
+        this.triggerBar(i, 0.5);
+      }
+    }
+  },
+  
+  // Beat pulse (called on each step)
+  beatPulse(isDrum, hasBass = false) {
+    if (isDrum) {
+      this.pulse(0.2, 0xff6b6b); // Red for kick
+      this.addRing();
+    } else if (hasBass) {
+      this.pulse(0.12, 0xa855f7); // Purple for bass
+    } else {
+      this.pulse(0.08, 0x60a5fa); // Blue for melody
+    }
+  },
+  
+  resize() {
+    if (!this.renderer) return;
+    const canvas = document.getElementById('piano-roll-canvas');
+    const container = canvas?.parentElement;
+    if (!container) return;
+    
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+    
+    this.camera.aspect = width / height;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(width, height);
+  },
+  
+  destroy() {
+    if (this.animationId) {
+      cancelAnimationFrame(this.animationId);
+      this.animationId = null;
+    }
+    if (this.mesh) {
+      this.mesh.geometry.dispose();
+      this.mesh.material.dispose();
+      this.scene.remove(this.mesh);
+      this.mesh = null;
+    }
+    if (this.particles) {
+      this.particles.geometry.dispose();
+      this.particles.material.dispose();
+      this.scene.remove(this.particles);
+      this.particles = null;
+    }
+    for (const ring of this.rings) {
+      ring.geometry.dispose();
+      ring.material.dispose();
+      this.scene.remove(ring);
+    }
+    this.rings = [];
+    for (const bar of this.freqBars) {
+      bar.geometry.dispose();
+      bar.material.dispose();
+      this.scene.remove(bar);
+    }
+    this.freqBars = [];
+    this.barHeights = [];
+    if (this.orbitTrail) {
+      this.orbitTrail.geometry.dispose();
+      this.orbitTrail.material.dispose();
+      this.scene.remove(this.orbitTrail);
+      this.orbitTrail = null;
+    }
+    this.trailPositions = [];
+    if (this.renderer) {
+      this.renderer.dispose();
+      this.renderer = null;
+    }
+    this.scene = null;
+    this.camera = null;
+  }
+};
+
+// ============================================
+// PIANO ROLL / MIDI EDITOR (Crystal Core only)
+// ============================================
+
+const pianoRoll = {
+  visible: false,
+  notes: [], // Melody notes (frequencies)
+  drums: [], // Drum pattern: 'K'=kick, 'S'=snare, 'H'=hihat, 'O'=open hat, ''=rest
+  gridEl: null,
+  cells: [],
+  drumCells: [],
+  playheadStep: 0,
+  isDragging: false,
+  dragMode: null, // 'add' or 'remove'
+  dragTrack: null, // 'melody' or 'drums'
+  tempo: 160, // BPM
+  melodyMuted: false,
+  drumsMuted: false,
+  bassMuted: false,
+  slides: [], // Array of booleans - true = slide/bend to next note
+  bass: [], // Bass notes (frequencies like melody)
+  
+  // C major scale frequencies (for highlighting)
+  scaleNotes: new Set([262, 294, 330, 349, 392, 440, 494, 523, 587, 659]),
+  
+  // Note names for display (maps frequencies to names)
+  freqToNote: {
+    262: 'C4', 294: 'D4', 330: 'E4', 349: 'F4', 392: 'G4', 440: 'A4', 494: 'B4',
+    523: 'C5', 587: 'D5', 659: 'E5', 698: 'F5', 784: 'G5', 880: 'A5', 988: 'B5'
+  },
+  
+  // All possible notes in the piano roll (low to high)
+  allNotes: [
+    { freq: 262, name: 'C4', inScale: true },
+    { freq: 294, name: 'D4', inScale: true },
+    { freq: 330, name: 'E4', inScale: true },
+    { freq: 349, name: 'F4', inScale: true },
+    { freq: 392, name: 'G4', inScale: true },
+    { freq: 440, name: 'A4', inScale: true },
+    { freq: 494, name: 'B4', inScale: true },
+    { freq: 523, name: 'C5', inScale: true },
+    { freq: 587, name: 'D5', inScale: true },
+    { freq: 659, name: 'E5', inScale: true }
+  ],
+  
+  // Drum sounds
+  drumTypes: [
+    { id: 'K', name: 'Kick', color: '#ff6b6b' },
+    { id: 'S', name: 'Snare', color: '#fbbf24' },
+    { id: 'H', name: 'Hat', color: '#60a5fa' }
+  ],
+  
+  // Bass notes (C3-G3 range - one octave below melody)
+  bassNotes: [
+    { note: 'G3', freq: 196 },
+    { note: 'F3', freq: 175 },
+    { note: 'E3', freq: 165 },
+    { note: 'D3', freq: 147 },
+    { note: 'C3', freq: 131 }
+  ],
+  
+  // Instrument options
+  instruments: [
+    { id: 'sawtooth', name: 'Saw', icon: '◢' },
+    { id: 'square', name: 'Square', icon: '◻' },
+    { id: 'triangle', name: 'Tri', icon: '△' },
+    { id: 'sine', name: 'Sine', icon: '∿' }
+  ],
+  melodyInstrument: 'sawtooth',
+  bassInstrument: 'triangle',
+
+  init() {
+    this.gridEl = document.getElementById('piano-roll-grid');
+    const pianoRollEl = document.getElementById('piano-roll');
+    const closeBtn = pianoRollEl.querySelector('.piano-roll-close');
+    
+    // Close button
+    closeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.hide();
+    });
+    
+    // Play/Pause button
+    const playPauseBtn = document.getElementById('piano-roll-play');
+    if (playPauseBtn) {
+      playPauseBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.togglePlayback();
+      });
+    }
+    
+    // Tempo slider
+    const tempoSlider = document.getElementById('piano-roll-tempo');
+    const tempoDisplay = document.getElementById('piano-roll-tempo-val');
+    if (tempoSlider) {
+      tempoSlider.addEventListener('input', (e) => {
+        this.tempo = parseInt(e.target.value);
+        if (tempoDisplay) tempoDisplay.textContent = this.tempo;
+        // Restart playback with new tempo if playing
+        if (musicPlayer.isPlaying) {
+          musicPlayer.stop();
+          musicPlayer.play(2); // Crystal Core
+        }
+      });
+    }
+    
+    // Clear button
+    const clearBtn = document.getElementById('piano-roll-clear');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.clearPattern();
+      });
+    }
+    
+    // Random button
+    const randomBtn = document.getElementById('piano-roll-random');
+    if (randomBtn) {
+      randomBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.randomPattern();
+      });
+    }
+    
+    // Pattern length controls
+    const growBtn = document.getElementById('piano-roll-grow');
+    const shrinkBtn = document.getElementById('piano-roll-shrink');
+    if (growBtn) {
+      growBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.changeLength(4);
+      });
+    }
+    if (shrinkBtn) {
+      shrinkBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.changeLength(-4);
+      });
+    }
+    
+    // Reset button
+    const resetBtn = document.getElementById('piano-roll-reset');
+    if (resetBtn) {
+      resetBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.resetPattern();
+      });
+    }
+    
+    // Copy button
+    const copyBtn = document.getElementById('piano-roll-copy');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.copyPattern();
+      });
+    }
+    
+    // Drag end listeners (on document to catch mouseup outside grid)
+    document.addEventListener('mouseup', () => this.endDrag());
+    document.addEventListener('mouseleave', () => this.endDrag());
+    
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      if (!this.visible) return;
+      if (e.code === 'Space') {
+        e.preventDefault();
+        this.togglePlayback();
+      }
+    });
+    
+    // Click on game canvas toggles piano roll (only for Crystal Core)
+    const gameCanvas = document.getElementById('game-canvas');
+    gameCanvas.addEventListener('click', (e) => {
+      if (gameManager.currentGameIndex === 2) { // Crystal Core
+        e.stopPropagation();
+        this.toggle();
+      }
+    });
+    
+    // Track mute toggles
+    const muteMelody = document.getElementById('mute-melody');
+    const muteDrums = document.getElementById('mute-drums');
+    if (muteMelody) {
+      muteMelody.addEventListener('change', (e) => {
+        this.melodyMuted = !e.target.checked;
+      });
+    }
+    if (muteDrums) {
+      muteDrums.addEventListener('change', (e) => {
+        this.drumsMuted = !e.target.checked;
+      });
+    }
+    const muteBass = document.getElementById('mute-bass');
+    if (muteBass) {
+      muteBass.addEventListener('change', (e) => {
+        this.bassMuted = !e.target.checked;
+      });
+    }
+    
+    // Instrument selectors
+    this.loadInstruments();
+    const melodyInst = document.getElementById('melody-instrument');
+    const bassInst = document.getElementById('bass-instrument');
+    if (melodyInst) {
+      melodyInst.value = this.melodyInstrument;
+      melodyInst.addEventListener('change', (e) => {
+        this.melodyInstrument = e.target.value;
+        this.saveInstruments();
+      });
+    }
+    if (bassInst) {
+      bassInst.value = this.bassInstrument;
+      bassInst.addEventListener('change', (e) => {
+        this.bassInstrument = e.target.value;
+        this.saveInstruments();
+      });
+    }
+  },
+  
+  togglePlayback() {
+    const btn = document.getElementById('piano-roll-play');
+    if (musicPlayer.isPlaying) {
+      musicPlayer.stop();
+      visualizerController.stop();
+      if (btn) btn.innerHTML = '▶';
+    } else {
+      musicPlayer.play(2);
+      visualizerController.start(2);
+      if (btn) btn.innerHTML = '⏸';
+    }
+  },
+  
+  clearPattern() {
+    for (let i = 0; i < this.notes.length; i++) {
+      this.notes[i] = 0;
+      this.drums[i] = '';
+      this.slides[i] = false;
+      this.bass[i] = 0;
+    }
+    this.savePattern();
+    this.renderGrid();
+  },
+  
+  randomPattern() {
+    const scale = [262, 294, 330, 392, 440, 523, 587, 659]; // C major pentatonic-ish
+    const bassScale = [131, 147, 165, 175, 196]; // C3-G3
+    
+    for (let i = 0; i < this.notes.length; i++) {
+      // Melody: 70% chance of a note, 30% chance of rest
+      if (Math.random() < 0.7) {
+        this.notes[i] = scale[Math.floor(Math.random() * scale.length)];
+      } else {
+        this.notes[i] = 0;
+      }
+      this.slides[i] = false; // No random slides - user adds them manually
+      
+      // Drums: kick on beats, snare on 2 and 4, hats elsewhere
+      if (i % 4 === 0) {
+        this.drums[i] = 'K'; // Kick on downbeats
+      } else if (i % 4 === 2) {
+        this.drums[i] = Math.random() < 0.7 ? 'S' : 'H'; // Snare or hat on 3
+      } else {
+        this.drums[i] = Math.random() < 0.5 ? 'H' : ''; // Hat or rest
+      }
+      
+      // Bass: notes on beats mostly
+      if (i % 4 === 0) {
+        this.bass[i] = bassScale[Math.floor(Math.random() * bassScale.length)];
+      } else if (Math.random() < 0.2) {
+        this.bass[i] = bassScale[Math.floor(Math.random() * bassScale.length)];
+      } else {
+        this.bass[i] = 0;
+      }
+    }
+    this.savePattern();
+    this.renderGrid();
+  },
+  
+  changeLength(delta) {
+    const newLen = Math.max(4, Math.min(32, this.notes.length + delta));
+    if (newLen === this.notes.length) return;
+    
+    if (newLen > this.notes.length) {
+      // Extend: add rests
+      while (this.notes.length < newLen) {
+        this.notes.push(0);
+        this.drums.push('');
+        this.slides.push(false);
+        this.bass.push(0);
+      }
+    } else {
+      // Shrink
+      this.notes.length = newLen;
+      this.drums.length = newLen;
+      this.slides.length = newLen;
+      this.bass.length = newLen;
+    }
+    
+    // Update display
+    const lengthVal = document.getElementById('piano-roll-length-val');
+    if (lengthVal) lengthVal.textContent = newLen;
+    
+    this.savePattern();
+    this.renderGrid();
+  },
+  
+  startDrag(cell, step, freq) {
+    this.isDragging = true;
+    const wasActive = cell.classList.contains('active');
+    this.dragMode = wasActive ? 'remove' : 'add';
+    this.applyDrag(cell, step, freq);
+  },
+  
+  continueDrag(cell, step, freq) {
+    if (!this.isDragging) return;
+    this.applyDrag(cell, step, freq);
+  },
+  
+  applyDrag(cell, step, freq) {
+    if (this.dragMode === 'add') {
+      // Clear other notes in this column first
+      this.cells.forEach(c => {
+        if (parseInt(c.dataset.step) === step) {
+          c.classList.remove('active');
+        }
+      });
+      cell.classList.add('active');
+      this.notes[step] = freq;
+      // Play preview with selected instrument
+      if (musicPlayer.audioContext) {
+        musicPlayer.init();
+        const melodyWave = this.melodyInstrument || 'sawtooth';
+        musicPlayer.playNote(freq, melodyWave, 0.06, 0.1, musicPlayer.audioContext.currentTime);
+      }
+      // React visualizer
+      pianoRollVisualizer.react(freq);
+    } else {
+      cell.classList.remove('active');
+      if (this.notes[step] === freq) {
+        this.notes[step] = 0;
+      }
+      pianoRollVisualizer.pulse(0.1);
+    }
+    this.savePattern();
+  },
+  
+  endDrag() {
+    this.isDragging = false;
+    this.dragMode = null;
+  },
+  
+  previewNote(freq) {
+    if (musicPlayer.audioContext) {
+      musicPlayer.init();
+      musicPlayer.playNote(freq, 'sawtooth', 0.03, 0.08, musicPlayer.audioContext.currentTime);
+    }
+  },
+
+  show() {
+    if (this.visible) return;
+    this.visible = true;
+    
+    // Get Crystal Core's notes, drums, slides, and bass
+    this.notes = this.getCrystalCoreNotes();
+    this.drums = this.getCrystalCoreDrums();
+    this.slides = this.getCrystalCoreSlides();
+    this.bass = this.getCrystalCoreBass();
+    
+    // Ensure arrays match notes length
+    while (this.drums.length < this.notes.length) this.drums.push('');
+    while (this.slides.length < this.notes.length) this.slides.push(false);
+    while (this.bass.length < this.notes.length) this.bass.push(0);
+    this.drums.length = this.notes.length;
+    this.slides.length = this.notes.length;
+    this.bass.length = this.notes.length;
+    
+    // Sync length display
+    const lengthVal = document.getElementById('piano-roll-length-val');
+    if (lengthVal) lengthVal.textContent = this.notes.length;
+    
+    // Sync tempo display
+    const tempoSlider = document.getElementById('piano-roll-tempo');
+    const tempoVal = document.getElementById('piano-roll-tempo-val');
+    if (tempoSlider) tempoSlider.value = this.tempo;
+    if (tempoVal) tempoVal.textContent = this.tempo;
+    
+    // Sync play button state
+    const playBtn = document.getElementById('piano-roll-play');
+    if (playBtn) playBtn.innerHTML = musicPlayer.isPlaying ? '⏸' : '▶';
+    
+    // Render the grid
+    this.renderGrid();
+    
+    document.getElementById('piano-roll').classList.add('visible');
+    
+    // Initialize 3D visualizer
+    setTimeout(() => {
+      pianoRollVisualizer.init();
+    }, 50);
+  },
+
+  hide() {
+    this.visible = false;
+    document.getElementById('piano-roll').classList.remove('visible');
+    pianoRollVisualizer.destroy();
+  },
+
+  toggle() {
+    if (this.visible) {
+      this.hide();
+    } else {
+      this.show();
+    }
+  },
+
+  getCrystalCoreNotes() {
+    // Try to load from localStorage first
+    const saved = localStorage.getItem('crystalCorePattern');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length >= 4) {
+          return parsed;
+        }
+      } catch (e) {}
+    }
+    // Default pattern
+    return [330, 392, 494, 392, 330, 294, 330, 392, 494, 587, 494, 392];
+  },
+  
+  getCrystalCoreDrums() {
+    // Try to load from localStorage
+    const saved = localStorage.getItem('crystalCoreDrums');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length >= 4) {
+          return parsed;
+        }
+      } catch (e) {}
+    }
+    // Default drum pattern (matches Crystal Core): K on 1,5,9, S on 5, H on off-beats
+    return ['K', 'H', '', 'H', 'K', 'H', '', 'H', 'K', 'H', '', 'H'];
+  },
+  
+  getCrystalCoreSlides() {
+    const saved = localStorage.getItem('crystalCoreSlides');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {}
+    }
+    return new Array(12).fill(false);
+  },
+  
+  getCrystalCoreBass() {
+    const saved = localStorage.getItem('crystalCoreBass');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {}
+    }
+    // Default bass pattern - root notes on beats (C3, D3)
+    return [131, 0, 0, 0, 147, 0, 0, 0, 131, 0, 0, 0];
+  },
+  
+  loadInstruments() {
+    this.melodyInstrument = localStorage.getItem('crystalCoreMelodyInst') || 'sawtooth';
+    this.bassInstrument = localStorage.getItem('crystalCoreBassInst') || 'triangle';
+  },
+  
+  saveInstruments() {
+    localStorage.setItem('crystalCoreMelodyInst', this.melodyInstrument);
+    localStorage.setItem('crystalCoreBassInst', this.bassInstrument);
+  },
+  
+  savePattern() {
+    localStorage.setItem('crystalCorePattern', JSON.stringify(this.notes));
+    localStorage.setItem('crystalCoreDrums', JSON.stringify(this.drums));
+    localStorage.setItem('crystalCoreSlides', JSON.stringify(this.slides));
+    localStorage.setItem('crystalCoreBass', JSON.stringify(this.bass));
+  },
+  
+  resetPattern() {
+    localStorage.removeItem('crystalCorePattern');
+    localStorage.removeItem('crystalCoreDrums');
+    localStorage.removeItem('crystalCoreSlides');
+    localStorage.removeItem('crystalCoreBass');
+    this.notes = [330, 392, 494, 392, 330, 294, 330, 392, 494, 587, 494, 392];
+    this.drums = ['K', 'H', '', 'H', 'K', 'H', '', 'H', 'K', 'H', '', 'H'];
+    this.slides = new Array(12).fill(false);
+    this.bass = [131, 0, 0, 0, 147, 0, 0, 0, 131, 0, 0, 0]; // C3, D3
+    const lengthVal = document.getElementById('piano-roll-length-val');
+    if (lengthVal) lengthVal.textContent = this.notes.length;
+    this.renderGrid();
+  },
+  
+  copyPattern() {
+    const patternStr = JSON.stringify(this.notes);
+    navigator.clipboard.writeText(patternStr).then(() => {
+      // Visual feedback
+      const btn = document.getElementById('piano-roll-copy');
+      if (btn) {
+        const orig = btn.innerHTML;
+        btn.innerHTML = '✓';
+        btn.style.color = '#4ade80';
+        setTimeout(() => {
+          btn.innerHTML = orig;
+          btn.style.color = '';
+        }, 1000);
+      }
+    }).catch(err => {
+      console.error('Copy failed:', err);
+    });
+  },
+
+  renderGrid() {
+    const numSteps = this.notes.length;
+    const rows = this.allNotes.slice().reverse(); // High notes at top
+    
+    // Set grid columns: 1 for piano key label + numSteps for note cells
+    this.gridEl.style.gridTemplateColumns = `48px repeat(${numSteps}, 1fr)`;
+    this.gridEl.innerHTML = '';
+    this.cells = [];
+    this.drumCells = [];
+    
+    // Step numbers header row
+    const headerSpacer = document.createElement('div');
+    headerSpacer.className = 'piano-key header-spacer';
+    this.gridEl.appendChild(headerSpacer);
+    
+    for (let step = 0; step < numSteps; step++) {
+      const stepNum = document.createElement('div');
+      stepNum.className = 'step-number' + (step % 4 === 0 ? ' beat-start' : '');
+      stepNum.textContent = step + 1;
+      this.gridEl.appendChild(stepNum);
+    }
+    
+    // === MELODY SECTION ===
+    rows.forEach((noteInfo, rowIdx) => {
+      // Piano key label (clickable to preview)
+      const keyEl = document.createElement('div');
+      keyEl.className = 'piano-key' + (noteInfo.name.includes('#') ? ' sharp' : '');
+      // Color code by octave
+      if (noteInfo.name.includes('4')) {
+        keyEl.classList.add('octave-4');
+      } else if (noteInfo.name.includes('5')) {
+        keyEl.classList.add('octave-5');
+      }
+      keyEl.textContent = noteInfo.name;
+      keyEl.style.cursor = 'pointer';
+      keyEl.addEventListener('click', () => {
+        this.previewNote(noteInfo.freq);
+      });
+      this.gridEl.appendChild(keyEl);
+      
+      // Note cells for each step
+      for (let step = 0; step < numSteps; step++) {
+        const cell = document.createElement('div');
+        cell.className = 'note-cell';
+        if (step % 4 === 0) cell.classList.add('beat-start');
+        
+        // Scale highlighting: dim notes not in scale
+        if (!this.scaleNotes.has(noteInfo.freq)) {
+          cell.classList.add('out-of-scale');
+        }
+        
+        // Octave color coding
+        if (noteInfo.name.includes('4')) {
+          cell.classList.add('octave-4');
+        } else if (noteInfo.name.includes('5')) {
+          cell.classList.add('octave-5');
+        }
+        
+        // Check if this cell is active (matches the note at this step)
+        const isActive = this.notes[step] === noteInfo.freq;
+        if (isActive) {
+          cell.classList.add('active');
+          // Add slide indicator if this note slides
+          if (this.slides[step]) {
+            cell.classList.add('slide');
+          }
+        }
+        
+        // Store reference
+        cell.dataset.row = rowIdx;
+        cell.dataset.step = step;
+        cell.dataset.freq = noteInfo.freq;
+        cell.dataset.track = 'melody';
+        
+        // Drag to paint (shift+click = toggle slide)
+        cell.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          
+          if (e.shiftKey && cell.classList.contains('active')) {
+            // Toggle slide on this note
+            this.toggleSlide(step);
+            cell.classList.toggle('slide', this.slides[step]);
+            return;
+          }
+          
+          this.dragTrack = 'melody';
+          this.startDrag(cell, step, noteInfo.freq);
+        });
+        cell.addEventListener('mouseenter', (e) => {
+          if (this.dragTrack === 'melody') {
+            this.continueDrag(cell, step, noteInfo.freq);
+          }
+        });
+        // Touch support
+        cell.addEventListener('touchstart', (e) => {
+          e.preventDefault();
+          this.dragTrack = 'melody';
+          this.startDrag(cell, step, noteInfo.freq);
+        }, { passive: false });
+        
+        // Hover preview (only if not already active)
+        cell.addEventListener('mouseenter', () => {
+          if (!cell.classList.contains('active') && !this.isDragging) {
+            this.previewNote(noteInfo.freq);
+          }
+        });
+        
+        this.gridEl.appendChild(cell);
+        this.cells.push(cell);
+      }
+    });
+    
+    // === DRUM SECTION DIVIDER ===
+    const dividerLabel = document.createElement('div');
+    dividerLabel.className = 'track-divider';
+    dividerLabel.textContent = 'DRUMS';
+    this.gridEl.appendChild(dividerLabel);
+    
+    for (let step = 0; step < numSteps; step++) {
+      const dividerCell = document.createElement('div');
+      dividerCell.className = 'track-divider-cell';
+      this.gridEl.appendChild(dividerCell);
+    }
+    
+    // === DRUM TRACKS ===
+    this.drumTypes.forEach((drumType) => {
+      // Drum label
+      const drumLabel = document.createElement('div');
+      drumLabel.className = 'piano-key drum-key';
+      drumLabel.textContent = drumType.name;
+      drumLabel.style.cursor = 'pointer';
+      drumLabel.addEventListener('click', () => {
+        this.previewDrum(drumType.id);
+      });
+      this.gridEl.appendChild(drumLabel);
+      
+      // Drum cells for each step
+      for (let step = 0; step < numSteps; step++) {
+        const cell = document.createElement('div');
+        cell.className = 'drum-cell';
+        if (step % 4 === 0) cell.classList.add('beat-start');
+        
+        // Check if this drum is active at this step
+        const isActive = this.drums[step] === drumType.id;
+        if (isActive) {
+          cell.classList.add('active');
+          cell.style.setProperty('--drum-color', drumType.color);
+        }
+        
+        // Store reference
+        cell.dataset.step = step;
+        cell.dataset.drumType = drumType.id;
+        cell.dataset.track = 'drums';
+        
+        // Click to toggle drum
+        cell.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          this.toggleDrum(cell, step, drumType.id);
+        });
+        
+        this.gridEl.appendChild(cell);
+        this.drumCells.push(cell);
+      }
+    });
+    
+    // === BASS SECTION DIVIDER ===
+    const bassDividerLabel = document.createElement('div');
+    bassDividerLabel.className = 'track-divider';
+    bassDividerLabel.textContent = 'BASS';
+    this.gridEl.appendChild(bassDividerLabel);
+    
+    for (let step = 0; step < numSteps; step++) {
+      const dividerCell = document.createElement('div');
+      dividerCell.className = 'track-divider-cell';
+      this.gridEl.appendChild(dividerCell);
+    }
+    
+    // === BASS TRACKS ===
+    this.bassCells = [];
+    this.bassNotes.forEach((noteInfo, rowIdx) => {
+      // Bass label
+      const bassLabel = document.createElement('div');
+      bassLabel.className = 'piano-key bass-key';
+      bassLabel.textContent = noteInfo.note;
+      bassLabel.style.cursor = 'pointer';
+      bassLabel.addEventListener('click', () => {
+        this.previewBass(noteInfo.freq);
+      });
+      this.gridEl.appendChild(bassLabel);
+      
+      // Bass cells for each step
+      for (let step = 0; step < numSteps; step++) {
+        const cell = document.createElement('div');
+        cell.className = 'bass-cell';
+        if (step % 4 === 0) cell.classList.add('beat-start');
+        
+        // Check if this bass note is active at this step
+        const isActive = this.bass[step] === noteInfo.freq;
+        if (isActive) {
+          cell.classList.add('active');
+        }
+        
+        // Store reference
+        cell.dataset.step = step;
+        cell.dataset.freq = noteInfo.freq;
+        cell.dataset.track = 'bass';
+        
+        // Click to toggle bass
+        cell.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          this.toggleBass(cell, step, noteInfo.freq);
+        });
+        
+        this.gridEl.appendChild(cell);
+        this.bassCells.push(cell);
+      }
+    });
+  },
+  
+  toggleBass(cell, step, freq) {
+    const wasActive = this.bass[step] === freq;
+    
+    // Clear this column in bass cells
+    this.bassCells.forEach(c => {
+      if (parseInt(c.dataset.step) === step) {
+        c.classList.remove('active');
+      }
+    });
+    
+    if (wasActive) {
+      this.bass[step] = 0;
+      pianoRollVisualizer.pulse(0.1);
+    } else {
+      this.bass[step] = freq;
+      cell.classList.add('active');
+      this.previewBass(freq);
+      pianoRollVisualizer.pulse(0.25);
+    }
+    this.savePattern();
+  },
+  
+  previewBass(freq) {
+    if (!musicPlayer.audioContext) {
+      musicPlayer.init();
+    }
+    const now = musicPlayer.audioContext.currentTime;
+    const bassWave = this.bassInstrument || 'triangle';
+    musicPlayer.playNote(freq, bassWave, 0.12, 0.2, now);
+  },
+  
+  toggleDrum(cell, step, drumType) {
+    const wasActive = this.drums[step] === drumType;
+    
+    // Clear this column in drum cells
+    this.drumCells.forEach(c => {
+      if (parseInt(c.dataset.step) === step) {
+        c.classList.remove('active');
+        c.style.removeProperty('--drum-color');
+      }
+    });
+    
+    if (wasActive) {
+      this.drums[step] = '';
+      pianoRollVisualizer.pulse(0.1);
+    } else {
+      this.drums[step] = drumType;
+      cell.classList.add('active');
+      const color = this.drumTypes.find(d => d.id === drumType)?.color || '#ff6b6b';
+      cell.style.setProperty('--drum-color', color);
+      // Preview sound
+      this.previewDrum(drumType);
+      // React visualizer
+      pianoRollVisualizer.pulse(drumType === 'K' ? 0.3 : 0.15);
+    }
+    this.savePattern();
+  },
+  
+  previewDrum(drumType) {
+    if (!musicPlayer.audioContext) {
+      musicPlayer.init();
+    }
+    const now = musicPlayer.audioContext.currentTime;
+    if (drumType === 'K') musicPlayer.playKick(now);
+    if (drumType === 'S') musicPlayer.playSnare(now);
+    if (drumType === 'H') musicPlayer.playHiHat(now);
+  },
+  
+  toggleSlide(step) {
+    // Only allow slide if there's a next note to bend to
+    const nextStep = (step + 1) % this.notes.length;
+    const nextNote = this.notes[nextStep];
+    if (nextNote > 0 && this.notes[step] > 0) {
+      this.slides[step] = !this.slides[step];
+      this.savePattern();
+    }
+  },
+
+  toggleCell(cell, step, freq) {
+    const wasActive = cell.classList.contains('active');
+    
+    // Clear any other active cell in this column
+    this.cells.forEach(c => {
+      if (parseInt(c.dataset.step) === step) {
+        c.classList.remove('active');
+      }
+    });
+    
+    if (wasActive) {
+      // Turn off - set to 0 (rest)
+      this.notes[step] = 0;
+    } else {
+      // Turn on
+      cell.classList.add('active');
+      this.notes[step] = freq;
+      
+      // Play preview sound
+      if (musicPlayer.audioContext) {
+        musicPlayer.init();
+        musicPlayer.playNote(freq, 'sawtooth', 0.08, 0.15, musicPlayer.audioContext.currentTime);
+      }
+    }
+  },
+
+  updatePlayhead(step) {
+    // Remove old playheads
+    this.cells.forEach(c => c.classList.remove('playhead'));
+    this.drumCells.forEach(c => c.classList.remove('playhead'));
+    if (this.bassCells) this.bassCells.forEach(c => c.classList.remove('playhead'));
+    
+    // Add new playheads
+    this.cells.forEach(c => {
+      if (parseInt(c.dataset.step) === step) c.classList.add('playhead');
+    });
+    this.drumCells.forEach(c => {
+      if (parseInt(c.dataset.step) === step) c.classList.add('playhead');
+    });
+    if (this.bassCells) {
+      this.bassCells.forEach(c => {
+        if (parseInt(c.dataset.step) === step) c.classList.add('playhead');
+      });
+    }
+    
+    this.playheadStep = step;
+  }
+};
+
+// ============================================
 // GAME MANAGER
 // ============================================
 
@@ -1333,8 +2781,10 @@ const gameManager = {
   camera: null,
   animationId: null,
   currentGame: null,
+  currentGameIndex: null,
 
   init(gameIndex) {
+    this.currentGameIndex = gameIndex;
     const gameCanvas = document.getElementById('game-canvas');
     const container = document.querySelector('.game-content');
     const width = container.clientWidth;
@@ -1375,6 +2825,8 @@ const gameManager = {
         break;
       case 2:
         this.createGame3();
+        // Auto-open piano roll for Crystal Core
+        setTimeout(() => pianoRoll.show(), 300);
         break;
       default:
         this.createGame1();
@@ -1430,6 +2882,9 @@ const gameManager = {
   },
 
   destroy() {
+    // Hide piano roll if open
+    pianoRoll.hide();
+    
     // Stop music and visualizer
     musicPlayer.stop();
     visualizerController.stop();
@@ -1456,6 +2911,7 @@ const gameManager = {
 
     this.scene = null;
     this.camera = null;
+    this.currentGameIndex = null;
   }
 };
 
@@ -1470,6 +2926,7 @@ window.addEventListener('resize', () => {
   resizeTimeout = setTimeout(() => {
     updateSlotPosition();
     gameManager.resize();
+    pianoRollVisualizer.resize();
   }, 100);
 });
 
@@ -1478,5 +2935,6 @@ window.addEventListener('orientationchange', () => {
   setTimeout(() => {
     updateSlotPosition();
     gameManager.resize();
+    pianoRollVisualizer.resize();
   }, 150);
 });
