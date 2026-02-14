@@ -952,6 +952,8 @@ function insertCard(clickedCard) {
     gameContent.classList.add('visible');
     // Initialize the game for this card (starts music)
     gameManager.init(clickedIndex);
+    // Pause shader backgrounds while game is playing
+    if (typeof ShaderCards !== 'undefined') ShaderCards.pause();
     // Show visualizer after a brief delay so it appears when music starts
     setTimeout(() => {
       visualizer.classList.add('visible');
@@ -1191,6 +1193,8 @@ function goBack() {
     // Allow new card insertion
     cardInserted = false;
     isGoingBack = false;
+    // Resume shader backgrounds
+    if (typeof ShaderCards !== 'undefined') ShaderCards.resume();
   }, [], 1.45);
 }
 

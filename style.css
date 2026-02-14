@@ -81,6 +81,38 @@ html, body {
   z-index: 0;
 }
 
+/* Shader canvas - replaces card image */
+.shader-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  display: block;
+}
+
+/* ASCII text overlay on shader */
+.ascii-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  margin: 0;
+  padding: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 5.5px;
+  line-height: 1.0;
+  letter-spacing: 0.5px;
+  color: rgba(255, 255, 255, 0.25);
+  pointer-events: none;
+  overflow: hidden;
+  white-space: pre;
+  mix-blend-mode: screen;
+}
+
 /* Card gradient overlay */
 .card-gradient {
   position: absolute;
