@@ -301,94 +301,68 @@ const musicPlayer = {
     this.intervalIds.push(setInterval(playStep, stepDuration * 1000));
   },
 
-  // Ring World - Mysterious, spacey with long harmonies
-  playRingWorld() {
+  // Signal Drift — warm electronic pulse, tape-warble arpeggios
+  playSignalDrift() {
     const ctx = this.audioContext;
-    const chordDuration = 2.5; // Long sustained chords
+    const bpm = 88;
+    const step16 = 60 / bpm / 4;
 
-    // Chord progressions (each chord is an array of frequencies)
-    const chords = [
-      [196, 247, 294],       // G minor
-      [175, 220, 262],       // F major
-      [165, 208, 247],       // E minor
-      [147, 185, 220],       // D minor
-      [165, 208, 247],       // E minor
-      [175, 220, 262],       // F major
-      [196, 247, 294],       // G minor
-      [220, 277, 330],       // A minor
-    ];
+    // Pentatonic arp in Eb minor — hypnotic loop
+    const arp = [311, 370, 415, 466, 554, 466, 415, 370,
+                 311, 370, 415, 554, 622, 554, 466, 415];
 
-    // High melody notes - expanded with more movement
-    const melodyNotes = [587, 659, 523, 587, 494, 440, 494, 523, 587, 784, 659, 587];
+    // Deep sub bass roots
+    const bass = [78, 78, 78, 78, 93, 93, 93, 93, 69, 69, 69, 69, 78, 78, 78, 78];
 
-    // Counter melody - lower register, answers the main melody
-    const counterMelody = [294, 330, 262, 294, 247, 220, 247, 262];
+    // High texture pings — sparse
+    const pings = [0,0,0,1109,0,0,831,0,0,0,1109,0,0,740,0,0];
 
-    // Shimmer notes - very high, sparse, ethereal
-    const shimmerNotes = [1175, 1318, 1047, 1175, 988, 880, 988, 1047];
+    let step = 0;
 
-    let chordIndex = 0;
-    let melodyIndex = 0;
-    let counterIndex = 0;
-    let shimmerIndex = 0;
-
-    const playChord = () => {
+    const playStep = () => {
       if (!this.isPlaying) return;
       const now = ctx.currentTime;
-      const chord = chords[chordIndex];
+      const idx = step % 16;
 
-      // Play each note in the chord with slight timing offsets for warmth
-      chord.forEach((freq, i) => {
-        // Low pad (triangle wave)
-        this.playPad(freq, 'triangle', 0.06, chordDuration * 0.95, now + i * 0.02);
-        // Higher octave pad (sine wave, quieter)
-        this.playPad(freq * 2, 'sine', 0.025, chordDuration * 0.9, now + i * 0.03);
-      });
+      // Arp — filtered triangle, slight detune for tape warmth
+      const arpFreq = arp[idx];
+      const wobble = 1 + Math.sin(now * 0.7) * 0.003;
+      this.playNote(arpFreq * wobble, 'triangle', 0.045, step16 * 1.8, now);
+      // Ghost echo (quieter, delayed)
+      this.playNote(arpFreq * 1.002, 'sine', 0.015, step16 * 2.5, now + step16 * 0.75);
 
-      // Main melody - plays on most chords now
-      if (chordIndex % 2 === 0 || chordIndex === 3 || chordIndex === 7) {
-        this.playPad(melodyNotes[melodyIndex], 'sine', 0.04, chordDuration * 0.6, now + 0.3);
-        melodyIndex = (melodyIndex + 1) % melodyNotes.length;
+      // Sub bass every 4 steps
+      if (idx % 4 === 0) {
+        const bassIdx = Math.floor(step / 4) % bass.length;
+        this.playPad(bass[bassIdx], 'sine', 0.07, step16 * 7, now);
       }
 
-      // Counter melody - plays on off-beats, lower and softer
-      if (chordIndex % 2 === 1) {
-        this.playPad(counterMelody[counterIndex], 'triangle', 0.03, chordDuration * 0.5, now + 0.8);
-        counterIndex = (counterIndex + 1) % counterMelody.length;
+      // High pings
+      const ping = pings[idx];
+      if (ping > 0) {
+        this.playNote(ping, 'sine', 0.02, step16 * 3, now + 0.02);
       }
 
-      // Shimmer - very quiet, high sparkle notes (every 3rd chord)
-      if (chordIndex % 3 === 0) {
-        this.playPad(shimmerNotes[shimmerIndex], 'sine', 0.015, chordDuration * 0.4, now + 1.2);
-        shimmerIndex = (shimmerIndex + 1) % shimmerNotes.length;
-      }
-
-      chordIndex = (chordIndex + 1) % chords.length;
-    };
-
-    // Subtle percussion - soft kicks and hats
-    let drumStep = 0;
-    const playDrums = () => {
-      if (!this.isPlaying) return;
-      const now = ctx.currentTime;
-
-      // Soft kick every 4 beats
-      if (drumStep % 8 === 0) {
+      // Soft kick every 4 steps
+      if (idx % 4 === 0) {
         this.playKick(now);
       }
 
-      // Soft hi-hat pattern
-      if (drumStep % 2 === 1) {
-        this.playHiHat(now, drumStep % 8 === 7); // Open hat occasionally
+      // Closed hat on offbeats with swing
+      if (idx % 2 === 1) {
+        this.playHiHat(now + (idx % 4 === 3 ? step16 * 0.12 : 0), false);
       }
 
-      drumStep++;
+      // Ghost snare
+      if (idx === 4 || idx === 12) {
+        this.playSnare(now);
+      }
+
+      step++;
     };
 
-    playChord();
-    this.intervalIds.push(setInterval(playChord, chordDuration * 1000));
-    // Drums - 8 hits per chord cycle
-    this.intervalIds.push(setInterval(playDrums, (chordDuration / 8) * 1000));
+    playStep();
+    this.intervalIds.push(setInterval(playStep, step16 * 1000));
   },
 
   // Play a pad sound with slow attack and release
@@ -508,7 +482,7 @@ const musicPlayer = {
         this.playCubeRunner();
         break;
       case 1:
-        this.playRingWorld();
+        this.playSignalDrift();
         break;
       case 2:
         this.playCrystalCore();
@@ -1201,13 +1175,13 @@ function goBack() {
 // URL routing for games
 const gameRoutes = {
   0: 'cube-runner',
-  1: 'ring-world',
+  1: 'signal-drift',
   2: 'crystal-core'
 };
 
 const routeToIndex = {
   'cube-runner': 0,
-  'ring-world': 1,
+  'signal-drift': 1,
   'crystal-core': 2
 };
 
@@ -2431,7 +2405,7 @@ const pianoRoll = {
     const rows = this.allNotes.slice().reverse(); // High notes at top
     
     // Set grid columns: 1 for piano key label + numSteps for note cells
-    this.gridEl.style.gridTemplateColumns = `48px repeat(${numSteps}, 1fr)`;
+    this.gridEl.style.gridTemplateColumns = `36px repeat(${numSteps}, 1fr)`;
     this.gridEl.innerHTML = '';
     this.cells = [];
     this.drumCells = [];
@@ -2795,13 +2769,14 @@ const gameManager = {
     const height = container.clientHeight;
 
     // Create new renderer for game
-    this.renderer = new THREE.WebGLRenderer({ canvas: gameCanvas, antialias: true });
+    this.renderer = new THREE.WebGLRenderer({ canvas: gameCanvas, antialias: true, alpha: true });
+    this.renderer.setClearColor(0x000000, 0);
     this.renderer.setSize(width, height);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
     // Create scene and camera
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x1a1a2e);
+    // No background - transparent so ASCII shader shows through
 
     this.camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 1000);
     this.camera.position.set(0, 0, 10);
@@ -2809,12 +2784,533 @@ const gameManager = {
     // Load the game based on index
     this.loadGame(gameIndex);
 
+    // Signal Drift: render 3D to offscreen, isometric cube shader is the main view
+    if (gameIndex === 0 || gameIndex === 1 || gameIndex === 2) {
+      gameCanvas.style.display = 'none';
+      this.offscreenCanvas = document.createElement('canvas');
+      this.offscreenCanvas.width = width;
+      this.offscreenCanvas.height = height;
+      this.offscreenRenderer = new THREE.WebGLRenderer({ canvas: this.offscreenCanvas, antialias: true });
+      const clearColors = { 0: 0x89CFF0, 1: 0x0d1a1f, 2: 0x1a0510 };
+      this.offscreenRenderer.setClearColor(clearColors[gameIndex], 1);
+      this.offscreenRenderer.setSize(width, height);
+      this.offscreenRenderer.setPixelRatio(1);
+    }
+
     // Start render loop
     this.animate();
 
     // Start music for this game
     musicPlayer.play(gameIndex);
     visualizerController.start(gameIndex);
+
+    // Start ASCII shader background (or main view for Signal Drift)
+    // Wait for fonts to load before building atlas
+    document.fonts.ready.then(() => this.startBgShader(gameIndex));
+  },
+
+  bgShaderRAF: null,
+  bgShaderGL: null,
+
+  startBgShader(gameIndex) {
+    const bgCanvas = document.getElementById('game-bg-shader');
+    if (!bgCanvas) return;
+    bgCanvas.style.display = 'block';
+    const container = document.querySelector('.game-content');
+    const w = container.clientWidth, h = container.clientHeight;
+    const dpr = Math.min(window.devicePixelRatio, 2);
+    bgCanvas.width = w * dpr; bgCanvas.height = h * dpr;
+
+    const gl = bgCanvas.getContext('webgl', { alpha: false });
+    if (!gl) return;
+    this.bgShaderGL = gl;
+
+    // Build font atlas — luminance chars + edge-aware chars
+    // First 10: luminance ramp (sparse → dense)
+    // Next 8: edge directions (|, -, /, \, +, ), (, _)
+    const chars = ' .:-=+*#%@|\\/-)(_.';
+    const COLS=10, cellW=32, cellH=32, ROWS=Math.ceil(chars.length/COLS);
+    const aW=COLS*cellW, aH=ROWS*cellH;
+    const ac=document.createElement('canvas'); ac.width=aW; ac.height=aH;
+    const ax=ac.getContext('2d');
+    ax.fillStyle='#000'; ax.fillRect(0,0,aW,aH);
+    ax.fillStyle='#fff'; ax.font='bold 28px GeistPixelSquare, monospace'; ax.textAlign='center'; ax.textBaseline='middle';
+    for(let i=0;i<chars.length;i++){
+      const c=i%COLS, r=Math.floor(i/COLS);
+      ax.fillText(chars[i], c*cellW+cellW/2, r*cellH+cellH/2);
+    }
+
+    function mkS(tp,src){const s=gl.createShader(tp);gl.shaderSource(s,src);gl.compileShader(s);return s;}
+    const vs=`attribute vec2 p;varying vec2 v;void main(){v=p*.5+.5;gl_Position=vec4(p,0,1);}`;
+
+    // Signal Drift & Cube Runner: ASCII shader that samples the 3D render as texture
+    // Signal Drift: isometric cube shader (matches card) sampling 3D torus
+    if (gameIndex === 1 && this.offscreenCanvas) {
+      const fs=`
+precision mediump float;
+varying vec2 v;
+uniform float t;
+uniform vec2 mouse;
+uniform vec2 res;
+uniform sampler2D src;
+
+vec3 isoBox(vec2 p, float sz, float angle, vec3 cTop, vec3 cLeft, vec3 cRight) {
+  float c=cos(angle), s=sin(angle);
+  p=mat2(c,-s,s,c)*p;
+  float top=step(abs(p.x)+abs(p.y-sz*0.3),sz*0.5);
+  float left=step(abs(p.x+sz*0.25),sz*0.25)*step(abs(p.y+sz*0.1),sz*0.35)*step(-p.x,0.0);
+  float right=step(abs(p.x-sz*0.25),sz*0.25)*step(abs(p.y+sz*0.1),sz*0.35)*step(p.x,0.0);
+  vec3 col=vec3(0.0);
+  col=mix(col,cRight,right);
+  col=mix(col,cLeft,left);
+  col=mix(col,cTop,top);
+  return col;
+}
+
+void main(){
+  vec2 uv=v;
+  float aspect=res.x/res.y;
+  uv.x*=aspect;
+
+  float gridSize=0.04;
+  vec2 cell=floor(uv/gridSize);
+  vec2 local=fract(uv/gridSize)-0.5;
+
+  float hash=fract(sin(dot(cell,vec2(127.1,311.7)))*43758.5453);
+  float phase=hash*6.28+t*0.8;
+  float angle=sin(phase)*0.4;
+
+  // Mouse push
+  vec2 cellCenter=(cell+0.5)*gridSize;
+  vec2 mp=vec2(mouse.x*aspect,mouse.y);
+  float md=length(cellCenter-mp);
+  float push=smoothstep(0.3,0.0,md)*1.2;
+  angle+=push*sin(t*3.0+hash*10.0);
+
+  // Base colors — pink/purple/teal
+  vec3 pink=vec3(0.9,0.25,0.5);
+  vec3 purple=vec3(0.45,0.2,0.7);
+  vec3 teal=vec3(0.38,0.34,0.62);
+
+  float ci=mod(cell.x+cell.y,3.0);
+  vec3 cTop=ci<1.0?pink:ci<2.0?purple:teal;
+  vec3 cLeft=cTop*0.5;
+  vec3 cRight=cTop*0.7;
+
+  float sz=0.35+sin(phase)*0.05;
+  vec3 box=isoBox(local,sz,angle,cTop,cLeft,cRight);
+
+  float bg=0.04;
+  vec3 color=max(box,vec3(bg));
+  gl_FragColor=vec4(color,1.0);
+}`;
+      const prog=gl.createProgram();
+      gl.attachShader(prog,mkS(gl.VERTEX_SHADER,vs));
+      gl.attachShader(prog,mkS(gl.FRAGMENT_SHADER,fs));
+      gl.linkProgram(prog);gl.useProgram(prog);
+      const buf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+      gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+      const ap=gl.getAttribLocation(prog,'p');gl.enableVertexAttribArray(ap);
+      gl.vertexAttribPointer(ap,2,gl.FLOAT,false,0,0);
+
+      // Scene texture
+      const sceneTex=gl.createTexture();
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D,sceneTex);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+
+      gl.uniform1i(gl.getUniformLocation(prog,'src'),0);
+      const uT=gl.getUniformLocation(prog,'t');
+      const uMouse=gl.getUniformLocation(prog,'mouse');
+      const uRes=gl.getUniformLocation(prog,'res');
+
+      let bmx=0.5,bmy=0.5;
+      container.addEventListener('mousemove',function(e){
+        const r=bgCanvas.getBoundingClientRect();
+        bmx=(e.clientX-r.left)/r.width;
+        bmy=1.0-(e.clientY-r.top)/r.height;
+      });
+
+      gl.viewport(0,0,bgCanvas.width,bgCanvas.height);
+      const self=this;
+      function bgLoop(time){
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D,sceneTex);
+        gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,self.offscreenCanvas);
+        gl.uniform1f(uT,time*0.001);
+        gl.uniform2f(uMouse,bmx,bmy);
+        gl.uniform2f(uRes,bgCanvas.width,bgCanvas.height);
+        gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+        self.bgShaderRAF=requestAnimationFrame(bgLoop);
+      }
+      this.bgShaderRAF=requestAnimationFrame(bgLoop);
+      return;
+    }
+
+    // Cube Runner: ASCII character shader on cube, white bg
+    if (gameIndex === 0 && this.offscreenCanvas) {
+      const rows=80;
+      const aspect=bgCanvas.width/bgCanvas.height;
+      const cols=Math.round(rows*aspect);
+
+      const lumChars = 10; // first 10 chars are luminance ramp
+      const fs=`
+precision mediump float;
+varying vec2 v;
+uniform sampler2D src;
+uniform sampler2D atlas;
+uniform float charCount,atlasCols,atlW,atlH,cW,cH;
+uniform vec2 mouse;
+uniform vec2 srcRes;
+
+float getLum(vec2 uv) {
+  vec4 s = texture2D(src, uv);
+  return dot(s.rgb, vec3(0.299, 0.587, 0.114));
+}
+
+// Sample atlas character
+float sampleChar(float ci, vec2 sub) {
+  ci = clamp(ci, 0.0, charCount - 1.0);
+  float col2 = mod(ci, atlasCols);
+  float row = floor(ci / atlasCols);
+  vec2 auv = vec2((col2 + sub.x) * cW / atlW, (row + (1.0 - sub.y)) * cH / atlH);
+  return texture2D(atlas, auv).r;
+}
+
+void main(){
+  vec2 grid = vec2(${cols.toFixed(1)}, ${rows.toFixed(1)});
+  vec2 cell = floor(v * grid);
+  vec2 sub = fract(v * grid);
+  vec2 sampleUV = vec2((cell.x + 0.5) / grid.x, 1.0 - (cell.y + 0.5) / grid.y);
+  vec4 scene = texture2D(src, sampleUV);
+  float lum = dot(scene.rgb, vec3(0.299, 0.587, 0.114));
+
+  // Blue bg where scene is background
+  vec3 bgBlue = vec3(0.537, 0.812, 0.941);
+  float distToBg = length(scene.rgb - bgBlue);
+  if(distToBg < 0.05) { gl_FragColor = vec4(bgBlue, 1.0); return; }
+
+  // Sobel edge detection
+  vec2 px = vec2(1.0 / grid.x, 1.0 / grid.y);
+  float tl = getLum(sampleUV + vec2(-px.x, px.y));
+  float tc = getLum(sampleUV + vec2(0.0, px.y));
+  float tr = getLum(sampleUV + vec2(px.x, px.y));
+  float ml = getLum(sampleUV + vec2(-px.x, 0.0));
+  float mr = getLum(sampleUV + vec2(px.x, 0.0));
+  float bl = getLum(sampleUV + vec2(-px.x, -px.y));
+  float bc = getLum(sampleUV + vec2(0.0, -px.y));
+  float br = getLum(sampleUV + vec2(px.x, -px.y));
+
+  float gx = -tl - 2.0*ml - bl + tr + 2.0*mr + br;
+  float gy = -tl - 2.0*tc - tr + bl + 2.0*bc + br;
+  float edgeMag = length(vec2(gx, gy));
+
+  // Choose character
+  float ci;
+  float edgeThreshold = 0.15;
+
+  if (edgeMag > edgeThreshold) {
+    // Shape-aware: pick edge character based on gradient angle
+    float angle = atan(gy, gx); // -PI to PI
+    // Gradient is perpendicular to edge, so edge direction = angle + PI/2
+    // Map edge direction to characters:
+    // | (index 10): vertical edge (gradient horizontal, angle ~0 or ~PI)
+    // - (index 13): horizontal edge (gradient vertical, angle ~PI/2)  
+    // \\ (index 11): diagonal edge
+    // / (index 12): other diagonal
+    float a = mod(angle + 3.14159, 3.14159); // 0 to PI
+    float sector = a / 3.14159 * 8.0; // 0 to 8
+
+    // 8 sectors: map to edge chars
+    // 0,8: horizontal gradient → vertical edge |
+    // 1,7: ~ → / 
+    // 2,6: ~ → - 
+    // 3,5: ~ → backslash
+    // 4: vertical gradient → horizontal edge -
+    if (sector < 1.0 || sector >= 7.0) ci = 10.0;       // |
+    else if (sector < 2.0 || (sector >= 6.0 && sector < 7.0)) ci = 12.0; // /
+    else if (sector < 3.0 || (sector >= 5.0 && sector < 6.0)) ci = 13.0; // -
+    else if (sector < 5.0) ci = 11.0;                     // backslash
+    else ci = 10.0;                                        // |
+
+    // Modulate edge char brightness with edge magnitude
+    float a2 = sampleChar(ci, sub);
+    float intensity = smoothstep(edgeThreshold, 0.6, edgeMag);
+    vec3 color = mix(bgBlue, vec3(1.0), a2 * intensity);
+    gl_FragColor = vec4(color, 1.0);
+    return;
+  }
+
+  // Luminance-based for non-edge areas (first 10 chars)
+  ci = floor(lum * ${(lumChars - 1).toFixed(1)});
+  ci = clamp(ci, 0.0, ${(lumChars - 1).toFixed(1)});
+
+  float a = sampleChar(ci, sub);
+
+  // Grab point interaction
+  vec2 cellCenter = (cell + 0.5) / grid;
+  vec2 mp = vec2(mouse.x, 1.0 - mouse.y);
+  float md = length(cellCenter - mp);
+  float near = step(md, 0.04);
+  float sqSize = 0.1 + lum * 0.4;
+  float sq = step(abs(sub.x - 0.5), sqSize * 0.5) * step(abs(sub.y - 0.5), sqSize * 0.5);
+  float shape = mix(a, sq, near);
+
+  vec3 color = mix(bgBlue, vec3(1.0), shape);
+  gl_FragColor = vec4(color, 1.0);
+}`;
+      const prog=gl.createProgram();
+      gl.attachShader(prog,mkS(gl.VERTEX_SHADER,vs));
+      gl.attachShader(prog,mkS(gl.FRAGMENT_SHADER,fs));
+      gl.linkProgram(prog);gl.useProgram(prog);
+      const buf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+      gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+      const ap=gl.getAttribLocation(prog,'p');gl.enableVertexAttribArray(ap);
+      gl.vertexAttribPointer(ap,2,gl.FLOAT,false,0,0);
+
+      // Uniforms for font atlas
+      gl.uniform1f(gl.getUniformLocation(prog,'charCount'),chars.length);
+      gl.uniform1f(gl.getUniformLocation(prog,'atlasCols'),COLS);
+      gl.uniform1f(gl.getUniformLocation(prog,'atlW'),aW);
+      gl.uniform1f(gl.getUniformLocation(prog,'atlH'),aH);
+      gl.uniform1f(gl.getUniformLocation(prog,'cW'),cellW);
+      gl.uniform1f(gl.getUniformLocation(prog,'cH'),cellH);
+
+      // Atlas texture (unit 1)
+      const atlasTex=gl.createTexture();
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D,atlasTex);
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,ac);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+
+      // Scene texture (unit 0)
+      const sceneTex=gl.createTexture();
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D,sceneTex);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+
+      gl.uniform1i(gl.getUniformLocation(prog,'src'),0);
+      gl.uniform1i(gl.getUniformLocation(prog,'atlas'),1);
+      const uMouse0=gl.getUniformLocation(prog,'mouse');
+
+      // Grab screen pos is updated by _cubeSpinUpdate from 3D projection
+
+      gl.viewport(0,0,bgCanvas.width,bgCanvas.height);
+      const self=this;
+      function bgLoop(){
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D,sceneTex);
+        gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,self.offscreenCanvas);
+        const gp = self._grabScreenPos || {x:-1,y:-1};
+        gl.uniform2f(uMouse0, gp.x, 1.0 - gp.y);
+        gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+        self.bgShaderRAF=requestAnimationFrame(bgLoop);
+      }
+      this.bgShaderRAF=requestAnimationFrame(bgLoop);
+      return;
+    }
+
+    // Crystal Core: red ASCII shader sampling 3D icosahedron
+    if (gameIndex === 2 && this.offscreenCanvas) {
+      const fs=`
+precision mediump float;
+varying vec2 v;
+uniform float t;
+uniform vec2 mouse;
+uniform sampler2D src;
+void main(){
+  vec2 cell=vec2(60.0,80.0);
+  vec2 cuv=floor(v*cell)/cell;
+  vec2 suv=fract(v*cell);
+
+  // Sample 3D scene
+  vec2 sampleUV=vec2(cuv.x, 1.0-cuv.y);
+  vec4 scene=texture2D(src, sampleUV);
+  float lum=dot(scene.rgb, vec3(0.299,0.587,0.114));
+
+  // Background detection
+  vec3 bgCol=vec3(0.102,0.02,0.063);
+  float distToBg=length(scene.rgb-bgCol);
+  bool isCube=distToBg>0.08;
+
+  // Noise for background pattern
+  float hash=fract(sin(dot(cuv*500.0,vec2(127.1,311.7)))*43758.5453);
+  float n=fract(sin(dot(cuv*200.0+t*0.3,vec2(12.9898,78.233)))*43758.5453);
+
+  // Mouse ripple
+  vec2 mp=vec2(mouse.x,1.0-mouse.y);
+  float d=length(cuv-mp);
+  float ripple=sin(d*20.0-t*3.0)*exp(-d*3.0)*0.3;
+
+  // Character rendering
+  float cw=0.7, ch=0.8;
+  float inChar=step(abs(suv.x-0.5),cw*0.5)*step(abs(suv.y-0.5),ch*0.5);
+  float ci=floor((isCube?lum:n)*8.0);
+  float idx=mod(ci,8.0);
+  float pattern=0.0;
+  if(idx<1.0) pattern=step(0.45,length(suv-0.5));
+  else if(idx<2.0) pattern=step(0.4,abs(suv.x-0.5))+step(0.4,abs(suv.y-0.5));
+  else if(idx<3.0) pattern=step(0.6,suv.x+suv.y);
+  else if(idx<4.0) pattern=step(0.35,abs(suv.y-0.5));
+  else if(idx<5.0) pattern=1.0-step(0.3,length(suv-0.5));
+  else if(idx<6.0) pattern=step(0.4,abs(suv.x-0.5));
+  else if(idx<7.0) pattern=step(0.3,max(abs(suv.x-0.5),abs(suv.y-0.5)));
+  else pattern=step(0.35,abs(suv.x-suv.y));
+
+  float bright=isCube ? lum*1.2+0.3 : n*0.4+0.1;
+  float mask=inChar*pattern*bright;
+
+  // Colors — brighter on the 3D shape
+  vec3 col1=vec3(0.85,0.1,0.3);
+  vec3 col2=vec3(0.6,0.05,0.5);
+  vec3 col3=vec3(1.0,0.3,0.5);
+  float blend=isCube?lum:n;
+  vec3 color=mix(col2,col1,blend);
+  color=mix(color,col3,ripple+0.2);
+
+  vec3 final_color=color*mask;
+  final_color+=color*0.03;
+  gl_FragColor=vec4(final_color,1.0);
+}`;
+      const prog=gl.createProgram();
+      gl.attachShader(prog,mkS(gl.VERTEX_SHADER,vs));
+      gl.attachShader(prog,mkS(gl.FRAGMENT_SHADER,fs));
+      gl.linkProgram(prog);gl.useProgram(prog);
+      const buf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+      gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+      const ap=gl.getAttribLocation(prog,'p');gl.enableVertexAttribArray(ap);
+      gl.vertexAttribPointer(ap,2,gl.FLOAT,false,0,0);
+
+      const sceneTex=gl.createTexture();
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D,sceneTex);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+      gl.uniform1i(gl.getUniformLocation(prog,'src'),0);
+
+      const uT=gl.getUniformLocation(prog,'t');
+      const uMouse=gl.getUniformLocation(prog,'mouse');
+      let bmx=0.5,bmy=0.5;
+      container.addEventListener('mousemove',function(e){
+        const r=bgCanvas.getBoundingClientRect();
+        bmx=(e.clientX-r.left)/r.width;
+        bmy=1.0-(e.clientY-r.top)/r.height;
+      });
+
+      gl.viewport(0,0,bgCanvas.width,bgCanvas.height);
+      const self=this;
+      function bgLoop(time){
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D,sceneTex);
+        gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,self.offscreenCanvas);
+        gl.uniform1f(uT,time*0.001);
+        gl.uniform2f(uMouse,bmx,bmy);
+        gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+        self.bgShaderRAF=requestAnimationFrame(bgLoop);
+      }
+      this.bgShaderRAF=requestAnimationFrame(bgLoop);
+      return;
+    }
+
+    // Default: procedural noise shader for other games
+    const colors = [
+      [0.1, 0.15, 0.1],
+      [0.05, 0.1, 0.12],
+      [0.12, 0.05, 0.08],
+    ];
+    const col = colors[gameIndex] || colors[0];
+
+    const fs=`
+precision mediump float;
+varying vec2 v;
+uniform float t;
+uniform vec2 res;
+uniform vec3 baseCol;
+uniform float charCount,atlasCols,atlasW,atlasH,cellW,cellH;
+uniform sampler2D atlas;
+uniform vec2 mouse;
+void main(){
+  vec2 grid=vec2(res.x/(cellW*0.6), res.y/(cellH*0.6));
+  vec2 cell=floor(v*grid);
+  vec2 sub=fract(v*grid);
+  float wave=sin(cell.x*0.3+cell.y*0.2+t*0.5)*0.5+0.5;
+  float drift=sin(t*0.3+cell.y*0.1)*0.3;
+  float ci=mod(floor((wave+drift)*charCount),charCount);
+  vec2 cellCenter=(cell+0.5)/grid;
+  vec2 mpos=vec2(mouse.x,1.0-mouse.y);
+  float md=length(cellCenter-mpos);
+  float near=smoothstep(0.15,0.0,md);
+  ci=mod(ci+near*15.0*sin(t*10.0+cell.x*13.0+cell.y*29.0),charCount);
+  float col2=mod(ci,atlasCols);
+  float row=floor(ci/atlasCols);
+  vec2 auv=vec2((col2+sub.x)*cellW/atlasW,(row+sub.y)*cellH/atlasH);
+  float a=texture2D(atlas,auv).r;
+  float brightness=wave*0.4+0.1;
+  vec3 color=baseCol*a*brightness*2.0;
+  gl_FragColor=vec4(color,1.0);
+}`;
+
+    const prog=gl.createProgram();
+    gl.attachShader(prog,mkS(gl.VERTEX_SHADER,vs));
+    gl.attachShader(prog,mkS(gl.FRAGMENT_SHADER,fs));
+    gl.linkProgram(prog);gl.useProgram(prog);
+    const buf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+    const ap=gl.getAttribLocation(prog,'p');gl.enableVertexAttribArray(ap);
+    gl.vertexAttribPointer(ap,2,gl.FLOAT,false,0,0);
+
+    gl.uniform1f(gl.getUniformLocation(prog,'charCount'),chars.length);
+    gl.uniform1f(gl.getUniformLocation(prog,'atlasCols'),COLS);
+    gl.uniform1f(gl.getUniformLocation(prog,'atlasW'),aW);
+    gl.uniform1f(gl.getUniformLocation(prog,'atlasH'),aH);
+    gl.uniform1f(gl.getUniformLocation(prog,'cellW'),cellW);
+    gl.uniform1f(gl.getUniformLocation(prog,'cellH'),cellH);
+    gl.uniform3f(gl.getUniformLocation(prog,'baseCol'),col[0],col[1],col[2]);
+    gl.uniform2f(gl.getUniformLocation(prog,'res'),bgCanvas.width,bgCanvas.height);
+
+    const atlasTex=gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D,atlasTex);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,ac);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+
+    const uT=gl.getUniformLocation(prog,'t');
+    const uMouse=gl.getUniformLocation(prog,'mouse');
+    let bmx=0.5,bmy=0.5;
+    container.addEventListener('mousemove',function(e){
+      const r=bgCanvas.getBoundingClientRect();
+      bmx=(e.clientX-r.left)/r.width;
+      bmy=(e.clientY-r.top)/r.height;
+    });
+
+    gl.viewport(0,0,bgCanvas.width,bgCanvas.height);
+    const self=this;
+    function bgLoop(time){
+      gl.uniform1f(uT,time*0.001);
+      gl.uniform2f(uMouse,bmx,bmy);
+      gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+      self.bgShaderRAF=requestAnimationFrame(bgLoop);
+    }
+    this.bgShaderRAF=requestAnimationFrame(bgLoop);
+  },
+
+  stopBgShader() {
+    if (this.bgShaderRAF) { cancelAnimationFrame(this.bgShaderRAF); this.bgShaderRAF = null; }
+    const bgCanvas = document.getElementById('game-bg-shader');
+    if (bgCanvas) bgCanvas.style.display = 'none';
   },
 
   loadGame(gameIndex) {
@@ -2830,7 +3326,7 @@ const gameManager = {
       case 2:
         this.createGame3();
         // Auto-open piano roll for Crystal Core
-        setTimeout(() => pianoRoll.show(), 300);
+        pianoRoll.show();
         break;
       default:
         this.createGame1();
@@ -2839,11 +3335,96 @@ const gameManager = {
 
   // Placeholder games - replace with your actual game logic
   createGame1() {
-    const geometry = new THREE.BoxGeometry(2, 2, 2);
-    const material = new THREE.MeshBasicMaterial({ color: 0xa8e6cf, wireframe: true });
+    const geometry = new THREE.BoxGeometry(1.8, 1.8, 1.8);
+    const material = new THREE.MeshNormalMaterial();
     const cube = new THREE.Mesh(geometry, material);
     this.scene.add(cube);
     this.currentGame = { type: 'cube', object: cube };
+    this.camera.position.set(0, 0, 6);
+
+    // Drag to spin with 3D grab point tracking
+    let dragging = false, prevX = 0, prevY = 0;
+    let velX = 0.005, velY = 0.005;
+    const container = document.querySelector('.game-content');
+    const raycaster = new THREE.Raycaster();
+    const mouse2 = new THREE.Vector2();
+    this._grabPoint = null; // 3D point on cube (in cube local space)
+    this._grabScreenPos = { x: -1, y: -1 }; // projected screen pos
+
+    const self = this;
+    container.addEventListener('mousedown', (e) => {
+      dragging = true; prevX = e.clientX; prevY = e.clientY;
+      velX = 0; velY = 0;
+      // Raycast to find grab point on cube
+      const r = container.getBoundingClientRect();
+      mouse2.x = ((e.clientX - r.left) / r.width) * 2 - 1;
+      mouse2.y = -((e.clientY - r.top) / r.height) * 2 + 1;
+      raycaster.setFromCamera(mouse2, self.camera);
+      const hits = raycaster.intersectObject(cube);
+      if (hits.length > 0) {
+        self._grabPoint = cube.worldToLocal(hits[0].point.clone());
+        self._grabNormal = hits[0].face.normal.clone(); // local space normal
+      } else {
+        self._grabPoint = null;
+        self._grabNormal = null;
+        self._grabScreenPos = { x: -1, y: -1 };
+      }
+    });
+    container.addEventListener('mousemove', (e) => {
+      if (!dragging) return;
+      const dx = e.clientX - prevX, dy = e.clientY - prevY;
+      cube.rotation.y += dx * 0.01;
+      cube.rotation.x += dy * 0.01;
+      velX = dy * 0.01; velY = dx * 0.01;
+      prevX = e.clientX; prevY = e.clientY;
+    });
+    container.addEventListener('mouseup', () => { dragging = false; self._grabPoint = null; self._grabNormal = null; self._grabScreenPos = {x:-1,y:-1}; });
+    container.addEventListener('mouseleave', () => { dragging = false; self._grabPoint = null; self._grabNormal = null; self._grabScreenPos = {x:-1,y:-1}; });
+    // Touch support
+    container.addEventListener('touchstart', (e) => {
+      dragging = true; prevX = e.touches[0].clientX; prevY = e.touches[0].clientY;
+      velX = 0; velY = 0;
+    });
+    container.addEventListener('touchmove', (e) => {
+      if (!dragging) return;
+      const dx = e.touches[0].clientX - prevX, dy = e.touches[0].clientY - prevY;
+      cube.rotation.y += dx * 0.01;
+      cube.rotation.x += dy * 0.01;
+      velX = dy * 0.01; velY = dx * 0.01;
+      prevX = e.touches[0].clientX; prevY = e.touches[0].clientY;
+    });
+    container.addEventListener('touchend', () => { dragging = false; self._grabPoint = null; self._grabNormal = null; self._grabScreenPos = {x:-1,y:-1}; });
+    this._cubeSpinUpdate = () => {
+      if (!dragging) {
+        cube.rotation.x += velX;
+        cube.rotation.y += velY;
+        velX *= 0.98; velY *= 0.98;
+        if (Math.abs(velX) < 0.001 && Math.abs(velY) < 0.001) {
+          velX = 0.003; velY = 0.005;
+        }
+      }
+      // Project grab point to screen space (only if face is visible)
+      if (self._grabPoint && self._grabNormal) {
+        // Transform normal to world space
+        const wn = self._grabNormal.clone().applyMatrix3(
+          new THREE.Matrix3().getNormalMatrix(cube.matrixWorld)
+        ).normalize();
+        // Camera direction (camera looks down -Z in its local space)
+        const camDir = new THREE.Vector3(0, 0, -1).applyQuaternion(self.camera.quaternion);
+        // If normal faces away from camera, hide grab
+        if (wn.dot(camDir) > -0.05) {
+          self._grabScreenPos = { x: -1, y: -1 };
+        } else {
+          const wp = self._grabPoint.clone();
+          cube.localToWorld(wp);
+          wp.project(self.camera);
+          self._grabScreenPos = {
+            x: (wp.x * 0.5 + 0.5),
+            y: (wp.y * 0.5 + 0.5)
+          };
+        }
+      }
+    };
   },
 
   createGame2() {
@@ -2867,11 +3448,20 @@ const gameManager = {
 
     // Rotate the current game object
     if (this.currentGame && this.currentGame.object) {
-      this.currentGame.object.rotation.x += 0.01;
-      this.currentGame.object.rotation.y += 0.01;
+      if (this._cubeSpinUpdate) {
+        this._cubeSpinUpdate();
+      } else {
+        this.currentGame.object.rotation.x += 0.01;
+        this.currentGame.object.rotation.y += 0.01;
+      }
     }
 
-    this.renderer.render(this.scene, this.camera);
+    // Signal Drift & Cube Runner: render to offscreen canvas (shader reads it as texture)
+    if ((this.currentGameIndex === 0 || this.currentGameIndex === 1 || this.currentGameIndex === 2) && this.offscreenRenderer) {
+      this.offscreenRenderer.render(this.scene, this.camera);
+    } else {
+      this.renderer.render(this.scene, this.camera);
+    }
   },
 
   resize() {
@@ -2893,6 +3483,19 @@ const gameManager = {
     musicPlayer.stop();
     visualizerController.stop();
 
+    // Stop bg shader
+    this.stopBgShader();
+
+    // Clean up offscreen renderer
+    if (this.offscreenRenderer) {
+      this.offscreenRenderer.dispose();
+      this.offscreenRenderer = null;
+      this.offscreenCanvas = null;
+    }
+    // Restore game canvas visibility
+    const gameCanvas = document.getElementById('game-canvas');
+    if (gameCanvas) gameCanvas.style.display = '';
+
     // Stop animation loop
     if (this.animationId) {
       cancelAnimationFrame(this.animationId);
@@ -2905,6 +3508,7 @@ const gameManager = {
       this.currentGame.object.material.dispose();
       this.scene.remove(this.currentGame.object);
       this.currentGame = null;
+      this._cubeSpinUpdate = null;
     }
 
     // Dispose of renderer
