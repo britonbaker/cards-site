@@ -8,7 +8,7 @@
   <!-- Open Graph -->
   <meta property="og:type" content="website">
   <meta property="og:title" content="Briton Baker — Interactive Experiments">
-  <meta property="og:description" content="Cube Runner, Ring World, Crystal Core — interactive 3D experiments by Briton Baker.">
+  <meta property="og:description" content="Cube Runner, Signal Drift, Crystal Core — interactive 3D experiments by Briton Baker.">
   <meta property="og:image" content="https://britonbaker.github.io/cards-site/assets/og/og-image.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -16,7 +16,7 @@
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Briton Baker — Interactive Experiments">
-  <meta name="twitter:description" content="Cube Runner, Ring World, Crystal Core — interactive 3D experiments by Briton Baker.">
+  <meta name="twitter:description" content="Cube Runner, Signal Drift, Crystal Core — interactive 3D experiments by Briton Baker.">
   <meta name="twitter:image" content="https://britonbaker.github.io/cards-site/assets/og/og-image.png">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="https://cdn.hugeicons.com/font/hgi-stroke-rounded.css">
@@ -29,22 +29,22 @@
   <section class="cards-section">
     <div class="cards-container">
       <div class="card card-green" data-index="0">
-        <div class="card-image" style="background-image: url('https://images.unsplash.com/photo-1519608487953-e999c86e7455?w=600&q=80')"></div>
+        <div class="card-image" id="cube-ascii-bg" style="background:#000"></div>
+        <canvas id="cube-shader-canvas" style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:0;border-radius:inherit;clip-path:inset(0 round 12px);"></canvas>
         <div class="card-gradient"></div>
         <span class="card-label">Cube Runner</span>
-        <div class="card-icon shape-square"></div>
       </div>
       <div class="card card-yellow" data-index="1">
-        <div class="card-image" style="background-image: url('https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600&q=80')"></div>
+        <div class="card-image" style="background:#0a0a0a"></div>
+        <canvas id="ring-shader-canvas" style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:1;border-radius:inherit;"></canvas>
         <div class="card-gradient"></div>
-        <span class="card-label">Ring World</span>
-        <div class="card-icon shape-circle"></div>
+        <span class="card-label">Signal Drift</span>
       </div>
       <div class="card card-red" data-index="2">
-        <div class="card-image" style="background-image: url('https://images.unsplash.com/photo-1534447677768-be436bb09401?w=600&q=80')"></div>
+        <div class="card-image" id="crystal-ascii-bg"></div>
+        <canvas id="ascii-shader-canvas" style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:0;border-radius:inherit;"></canvas>
         <div class="card-gradient"></div>
         <span class="card-label">Crystal Core</span>
-        <div class="card-icon shape-diamond"></div>
       </div>
     </div>
 
@@ -105,7 +105,8 @@
 
   <!-- Game content area -->
   <div class="game-content">
-    <canvas id="game-canvas"></canvas>
+    <canvas id="game-bg-shader" style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:5;"></canvas>
+    <canvas id="game-canvas" style="position:relative;z-index:1;"></canvas>
     <!-- Piano roll overlay (Crystal Core only) -->
     <div class="piano-roll" id="piano-roll">
       <div class="piano-roll-visualizer">
@@ -174,5 +175,422 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
   <script src="main.js"></script>
 <div class="build-hover-area"><span class="build-number">v1.0.1</span></div>
+<script>
+// Signal Drift — isometric geometric cube grid
+(function(){
+  const canvas = document.getElementById('ring-shader-canvas');
+  if(!canvas) return;
+  const gl = canvas.getContext('webgl');
+  if(!gl) return;
+
+  const vs=`attribute vec2 a_pos;varying vec2 v_uv;void main(){v_uv=a_pos*0.5+0.5;gl_Position=vec4(a_pos,0,1);}`;
+  const fs=`
+precision mediump float;
+varying vec2 v_uv;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform vec2 u_res;
+
+// Isometric cube face rendering
+vec3 isoBox(vec2 p, float sz, float angle, vec3 cTop, vec3 cLeft, vec3 cRight) {
+  // Rotate point
+  float c=cos(angle), s=sin(angle);
+  p=mat2(c,-s,s,c)*p;
+
+  // Isometric diamond for top face
+  float top=step(abs(p.x)+abs(p.y-sz*0.3),sz*0.5);
+  // Left face
+  float left=step(abs(p.x+sz*0.25),sz*0.25)*step(abs(p.y+sz*0.1),sz*0.35)*step(-p.x,0.0);
+  // Right face  
+  float right=step(abs(p.x-sz*0.25),sz*0.25)*step(abs(p.y+sz*0.1),sz*0.35)*step(p.x,0.0);
+
+  vec3 col=vec3(0.0);
+  col=mix(col,cRight,right);
+  col=mix(col,cLeft,left);
+  col=mix(col,cTop,top);
+  return col;
+}
+
+void main(){
+  vec2 uv=v_uv;
+  float aspect=u_res.x/u_res.y;
+  uv.x*=aspect;
+
+  // Grid
+  float gridSize=0.12;
+  vec2 cell=floor(uv/gridSize);
+  vec2 local=fract(uv/gridSize)-0.5;
+
+  // Per-cell animation
+  float hash=fract(sin(dot(cell,vec2(127.1,311.7)))*43758.5453);
+  float phase=hash*6.28+u_time*0.8;
+
+  // Rotation per cell
+  float angle=sin(phase)*0.4;
+
+  // Mouse interaction — push rotation
+  vec2 cellCenter=(cell+0.5)*gridSize;
+  vec2 mp=vec2(u_mouse.x*aspect,u_mouse.y);
+  float md=length(cellCenter-mp);
+  float push=smoothstep(0.3,0.0,md)*1.2;
+  angle+=push*sin(u_time*3.0+hash*10.0);
+
+  // Colors — pink/magenta, purple, teal (from the css-doodle)
+  vec3 pink=vec3(0.9,0.25,0.5);
+  vec3 purple=vec3(0.45,0.2,0.7);
+  vec3 teal=vec3(0.38,0.34,0.62);
+
+  // Vary colors per cell
+  float ci=mod(cell.x+cell.y,3.0);
+  vec3 cTop=ci<1.0?pink:ci<2.0?purple:teal;
+  vec3 cLeft=cTop*0.5;
+  vec3 cRight=cTop*0.7;
+
+  // Size pulsing
+  float sz=0.35+sin(phase)*0.05;
+
+  vec3 box=isoBox(local,sz,angle,cTop,cLeft,cRight);
+
+  // Dark background
+  float bg=0.04;
+  vec3 color=max(box,vec3(bg));
+
+  gl_FragColor=vec4(color,1.0);
+}`;
+
+  function makeShader(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);return s;}
+  const prog=gl.createProgram();
+  gl.attachShader(prog,makeShader(gl.VERTEX_SHADER,vs));
+  gl.attachShader(prog,makeShader(gl.FRAGMENT_SHADER,fs));
+  gl.linkProgram(prog);gl.useProgram(prog);
+
+  const buf=gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+  const aPos=gl.getAttribLocation(prog,'a_pos');
+  gl.enableVertexAttribArray(aPos);
+  gl.vertexAttribPointer(aPos,2,gl.FLOAT,false,0,0);
+
+  const uTime=gl.getUniformLocation(prog,'u_time');
+  const uMouse=gl.getUniformLocation(prog,'u_mouse');
+  const uRes=gl.getUniformLocation(prog,'u_res');
+
+  let mx=0.5,my=0.5;
+  const card=canvas.closest('.card-yellow');
+  if(card){
+    card.addEventListener('mousemove',function(e){
+      const r=canvas.getBoundingClientRect();
+      mx=(e.clientX-r.left)/r.width;
+      my=1.0-(e.clientY-r.top)/r.height;
+    });
+    card.addEventListener('mouseleave',function(){mx=0.5;my=0.5;});
+  }
+
+  function resize(){
+    const r=canvas.getBoundingClientRect();
+    canvas.width=r.width*window.devicePixelRatio;
+    canvas.height=r.height*window.devicePixelRatio;
+    gl.viewport(0,0,canvas.width,canvas.height);
+  }
+  resize();window.addEventListener('resize',resize);
+
+  function loop(t){
+    gl.uniform1f(uTime,t*0.001);
+    gl.uniform2f(uMouse,mx,my);
+    gl.uniform2f(uRes,canvas.width,canvas.height);
+    gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+})();
+</script>
+<script>
+// Cube Runner — pure black & white ASCII shader
+(function(){
+  const canvas = document.getElementById('cube-shader-canvas');
+  if(!canvas) return;
+  const gl = canvas.getContext('webgl');
+  if(!gl) return;
+
+  const vs = `attribute vec2 a_pos;void main(){gl_Position=vec4(a_pos,0,1);}`;
+  const fs = `
+precision mediump float;
+uniform vec2 u_res;
+uniform float u_time;
+uniform vec2 u_mouse;
+
+float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float noise(vec2 p){
+  vec2 i=floor(p),f=fract(p);
+  f=f*f*(3.0-2.0*f);
+  return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),
+             mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);
+}
+float fbm(vec2 p){
+  float v=0.0,a=0.5;
+  for(int i=0;i<4;i++){v+=a*noise(p);p*=2.0;a*=0.5;}
+  return v;
+}
+
+void main(){
+  vec2 uv=gl_FragCoord.xy/u_res;
+  vec2 cell=vec2(40.0,56.0);
+  vec2 cuv=floor(uv*cell)/cell;
+  vec2 suv=fract(uv*cell);
+
+  float d=length(cuv-u_mouse);
+  float ripple=sin(d*18.0-u_time*4.0)*exp(-d*3.5)*0.25;
+
+  float n=fbm(cuv*4.0+vec2(u_time*0.5,0.0)+ripple);
+
+  // Character brightness from noise
+  float bright=smoothstep(0.15,0.85,n+ripple*0.5);
+
+  // Character shape based on noise value
+  float ci=floor(n*8.0);
+  float cw=0.6,ch=0.75;
+  float inChar=step(abs(suv.x-0.5),cw*0.5)*step(abs(suv.y-0.5),ch*0.5);
+
+  float pattern=0.0;
+  float idx=mod(ci,7.0);
+  if(idx<1.0) pattern=1.0-step(0.15,length(suv-0.5));
+  else if(idx<2.0) pattern=step(0.42,abs(suv.x-0.5))+step(0.42,abs(suv.y-0.5));
+  else if(idx<3.0) pattern=step(0.55,suv.x+suv.y)*step(suv.x+suv.y,0.95);
+  else if(idx<4.0) pattern=step(0.38,abs(suv.y-0.5));
+  else if(idx<5.0) pattern=step(0.2,length(suv-0.5))*step(length(suv-0.5),0.35);
+  else if(idx<6.0) pattern=step(0.35,max(abs(suv.x-0.5),abs(suv.y-0.5)));
+  else pattern=step(0.3,abs(suv.x-suv.y))*step(abs(suv.x-(1.0-suv.y)),0.3);
+
+  float mask=inChar*pattern*bright;
+  vec3 bg=vec3(0.537,0.812,0.941); // light blue #89CFf0
+  vec3 fg=vec3(0.85,0.93,0.96); // warm light blue
+  gl_FragColor=vec4(mix(bg,fg,mask),1.0);
+}`;
+
+  function makeShader(type,src){
+    const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);return s;
+  }
+  const prog=gl.createProgram();
+  gl.attachShader(prog,makeShader(gl.VERTEX_SHADER,vs));
+  gl.attachShader(prog,makeShader(gl.FRAGMENT_SHADER,fs));
+  gl.linkProgram(prog);gl.useProgram(prog);
+
+  const buf=gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+  const aPos=gl.getAttribLocation(prog,'a_pos');
+  gl.enableVertexAttribArray(aPos);
+  gl.vertexAttribPointer(aPos,2,gl.FLOAT,false,0,0);
+
+  const uRes=gl.getUniformLocation(prog,'u_res');
+  const uTime=gl.getUniformLocation(prog,'u_time');
+  const uMouse=gl.getUniformLocation(prog,'u_mouse');
+
+  let mx=0.5,my=0.5;
+  const card=canvas.closest('.card-green');
+  if(card){
+    card.addEventListener('mousemove',function(e){
+      const r=card.getBoundingClientRect();
+      mx=(e.clientX-r.left)/r.width;
+      my=1.0-(e.clientY-r.top)/r.height;
+    });
+  }
+
+  function resize(){
+    const r=canvas.getBoundingClientRect();
+    canvas.width=r.width*window.devicePixelRatio;
+    canvas.height=r.height*window.devicePixelRatio;
+    gl.viewport(0,0,canvas.width,canvas.height);
+  }
+  resize();window.addEventListener('resize',resize);
+
+  function loop(t){
+    gl.uniform2f(uRes,canvas.width,canvas.height);
+    gl.uniform1f(uTime,t*0.001);
+    gl.uniform2f(uMouse,mx,my);
+    gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+})();
+</script>
+<script>
+(function(){
+  const canvas = document.getElementById('ascii-shader-canvas');
+  if(!canvas) return;
+  const gl = canvas.getContext('webgl');
+  if(!gl) return;
+
+  const vs = `attribute vec2 a_pos;void main(){gl_Position=vec4(a_pos,0,1);}`;
+  const fs = `
+precision mediump float;
+uniform vec2 u_res;
+uniform float u_time;
+uniform vec2 u_mouse;
+
+float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+
+float noise(vec2 p){
+  vec2 i=floor(p),f=fract(p);
+  f=f*f*(3.0-2.0*f);
+  return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),
+             mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);
+}
+
+float fbm(vec2 p){
+  float v=0.0,a=0.5;
+  for(int i=0;i<5;i++){v+=a*noise(p);p*=2.0;a*=0.5;}
+  return v;
+}
+
+void main(){
+  vec2 uv=gl_FragCoord.xy/u_res;
+  vec2 cell=vec2(60.0, 80.0);
+  vec2 cuv=floor(uv*cell)/cell;
+  
+  float d=length(cuv-u_mouse);
+  float ripple=sin(d*20.0-u_time*3.0)*exp(-d*3.0)*0.3;
+  
+  float n=fbm(cuv*5.0+u_time*0.3+ripple);
+  n+=ripple;
+  
+  // ASCII character index from noise
+  float ci=floor(n*10.0);
+  // Use character density to determine brightness
+  float bright=n*0.8+0.2;
+  
+  // Sub-cell UV for character rendering
+  vec2 suv=fract(uv*cell);
+  
+  // Render dot-matrix style characters
+  float cw=0.7, ch=0.8;
+  float inChar=step(abs(suv.x-0.5),cw*0.5)*step(abs(suv.y-0.5),ch*0.5);
+  
+  // Different patterns per character index
+  float pattern=0.0;
+  float idx=mod(ci,8.0);
+  if(idx<1.0) pattern=step(0.45,length(suv-0.5)); // dot
+  else if(idx<2.0) pattern=step(0.4,abs(suv.x-0.5))+step(0.4,abs(suv.y-0.5)); // +
+  else if(idx<3.0) pattern=step(0.6,suv.x+suv.y); // slash
+  else if(idx<4.0) pattern=step(0.35,abs(suv.y-0.5)); // =
+  else if(idx<5.0) pattern=1.0-step(0.3,length(suv-0.5)); // O
+  else if(idx<6.0) pattern=step(0.4,abs(suv.x-0.5)); // |
+  else if(idx<7.0) pattern=step(0.3,max(abs(suv.x-0.5),abs(suv.y-0.5))); // #
+  else pattern=step(0.35,abs(suv.x-suv.y)); // X
+  
+  float mask=inChar*pattern*bright;
+  
+  // Deep red/purple/pink tones
+  vec3 col1=vec3(0.85,0.1,0.3);
+  vec3 col2=vec3(0.6,0.05,0.5);
+  vec3 col3=vec3(1.0,0.3,0.5);
+  vec3 color=mix(col2,col1,n);
+  color=mix(color,col3,ripple+0.2);
+  
+  vec3 final_color=color*mask;
+  // Add subtle background glow
+  final_color+=color*0.05;
+  
+  gl_FragColor=vec4(final_color,1.0);
+}`;
+
+  function makeShader(type,src){
+    const s=gl.createShader(type);
+    gl.shaderSource(s,src);gl.compileShader(s);return s;
+  }
+  const prog=gl.createProgram();
+  gl.attachShader(prog,makeShader(gl.VERTEX_SHADER,vs));
+  gl.attachShader(prog,makeShader(gl.FRAGMENT_SHADER,fs));
+  gl.linkProgram(prog);gl.useProgram(prog);
+
+  const buf=gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+  const aPos=gl.getAttribLocation(prog,'a_pos');
+  gl.enableVertexAttribArray(aPos);
+  gl.vertexAttribPointer(aPos,2,gl.FLOAT,false,0,0);
+
+  const uRes=gl.getUniformLocation(prog,'u_res');
+  const uTime=gl.getUniformLocation(prog,'u_time');
+  const uMouse=gl.getUniformLocation(prog,'u_mouse');
+
+  let mx=0.5,my=0.5;
+  const card=canvas.closest('.card-red');
+  if(card){
+    card.addEventListener('mousemove',function(e){
+      const r=card.getBoundingClientRect();
+      mx=(e.clientX-r.left)/r.width;
+      my=1.0-(e.clientY-r.top)/r.height;
+    });
+  }
+
+  function resize(){
+    const r=canvas.getBoundingClientRect();
+    canvas.width=r.width*window.devicePixelRatio;
+    canvas.height=r.height*window.devicePixelRatio;
+    gl.viewport(0,0,canvas.width,canvas.height);
+  }
+  resize();
+  window.addEventListener('resize',resize);
+
+  function loop(t){
+    gl.uniform2f(uRes,canvas.width,canvas.height);
+    gl.uniform1f(uTime,t*0.001);
+    gl.uniform2f(uMouse,mx,my);
+    gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+})();
+
+// Magnetic card effect
+(function(){
+  if(window.matchMedia('(hover: none)').matches) return;
+  var cards = document.querySelectorAll('.card');
+  var maxPull = 12;
+  var range = 180;
+
+  cards.forEach(function(el){
+    var container = el.parentElement;
+    var currentX=0,currentY=0,targetX=0,targetY=0;
+    var frozen=false,rafId=null,restCx,restCy;
+
+    function cacheRest(){
+      var prev=el.style.transform;
+      el.style.transform='none';
+      var r=el.getBoundingClientRect();
+      restCx=r.left+r.width/2;
+      restCy=r.top+r.height/2;
+      el.style.transform=prev;
+    }
+    function lerp(a,b,t){return a+(b-a)*t;}
+    function animate(){
+      if(frozen){rafId=null;return;}
+      currentX=lerp(currentX,targetX,0.18);
+      currentY=lerp(currentY,targetY,0.18);
+      if(Math.abs(currentX-targetX)<0.1&&Math.abs(currentY-targetY)<0.1){currentX=targetX;currentY=targetY;}
+      el.style.transform=currentX===0&&currentY===0?'':'translate('+currentX.toFixed(1)+'px,'+currentY.toFixed(1)+'px)';
+      if(currentX===targetX&&currentY===targetY){rafId=null;return;}
+      rafId=requestAnimationFrame(animate);
+    }
+    function kick(){if(!rafId)rafId=requestAnimationFrame(animate);}
+
+    container.addEventListener('mouseenter',function(){cacheRest();});
+    container.addEventListener('mousemove',function(e){
+      if(restCx==null)cacheRest();
+      var mx=e.clientX,my=e.clientY;
+      var live=el.getBoundingClientRect();
+      if(mx>=live.left&&mx<=live.right&&my>=live.top&&my<=live.bottom){frozen=true;return;}
+      frozen=false;
+      var dx=mx-restCx,dy=my-restCy;
+      var dist=Math.sqrt(dx*dx+dy*dy);
+      if(dist<range&&dist>0){var pull=maxPull*(1-dist/range);targetX=(dx/dist)*pull;targetY=(dy/dist)*pull;}
+      else{targetX=0;targetY=0;}
+      kick();
+    });
+    container.addEventListener('mouseleave',function(){frozen=false;targetX=0;targetY=0;kick();});
+  });
+})();
+</script>
 </body>
 </html>

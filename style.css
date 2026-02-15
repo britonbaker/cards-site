@@ -58,6 +58,7 @@ html, body {
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
   transform: translateZ(0);
+  box-shadow: 0 3px 0 0 rgba(0,0,0,1);
 }
 
 .card:hover {
@@ -79,6 +80,38 @@ html, body {
   background-position: center;
   transition: transform 0.4s ease;
   z-index: 0;
+}
+
+/* Shader canvas - replaces card image */
+.shader-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  display: block;
+}
+
+/* ASCII text overlay on shader */
+.ascii-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  margin: 0;
+  padding: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 5.5px;
+  line-height: 1.0;
+  letter-spacing: 0.5px;
+  color: rgba(255, 255, 255, 0.25);
+  pointer-events: none;
+  overflow: hidden;
+  white-space: pre;
+  mix-blend-mode: screen;
 }
 
 /* Card gradient overlay */
@@ -125,11 +158,11 @@ html, body {
 }
 
 .card-green::before {
-  background: linear-gradient(to top, rgba(255, 255, 255, 0.9) 0%, rgba(168, 230, 207, 0.5) 25%, transparent 55%);
+  background: none;
 }
 
 .card-yellow::before {
-  background: linear-gradient(to top, rgba(255, 255, 255, 0.9) 0%, rgba(255, 217, 61, 0.5) 25%, transparent 55%);
+  background: none;
 }
 
 .card-red::before {
@@ -138,11 +171,11 @@ html, body {
 
 /* Card colors - gradient overlays */
 .card-green .card-gradient {
-  background: linear-gradient(to top, rgba(168, 230, 207, 0.7) 0%, rgba(168, 230, 207, 0.5) 10%, transparent 60%);
+  background: none;
 }
 
 .card-yellow .card-gradient {
-  background: linear-gradient(to top, rgba(255, 217, 61, 0.7) 0%, rgba(255, 217, 61, 0.5) 10%, transparent 60%);
+  background: none;
 }
 
 .card-red .card-gradient {
@@ -175,13 +208,21 @@ html, body {
   transform: rotate(45deg);
 }
 
+@font-face {
+  font-family: 'GeistPixelSquare';
+  src: url('assets/GeistPixel-Square.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 .card-label {
   position: absolute;
   top: 14px;
   left: 16px;
-  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
-  font-size: 13px;
-  font-weight: 600;
+  font-family: 'GeistPixelSquare', monospace;
+  font-size: 14px;
+  font-weight: normal;
   color: rgba(255, 255, 255, 0.95);
   z-index: 2;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
@@ -499,7 +540,7 @@ html, body {
   border: none;
   border-radius: 10px;
   font-size: 24px;
-  color: #333;
+  color: #333 !important;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -510,6 +551,10 @@ html, body {
 
 .mute-toggle:hover {
   background: transparent;
+}
+
+.mute-toggle i {
+  color: inherit;
 }
 
 .mute-button .mute-icon-off {
@@ -640,6 +685,12 @@ html, body {
   z-index: 10;
   opacity: 0;
   visibility: hidden;
+  background: #89CFF0;
+  overflow: hidden;
+  cursor: grab;
+}
+.game-content:active {
+  cursor: grabbing;
 }
 
 .game-content.visible {
@@ -811,7 +862,7 @@ html, body {
   .mute-button.expanded {
     width: 160px;
     justify-content: flex-start;
-    background: rgba(0, 0, 0, 0.06);
+    background: rgba(255, 255, 255, 0.85);
   }
 
   .mute-toggle {
@@ -1219,20 +1270,20 @@ html, body {
 
 .piano-roll-grid {
   display: grid;
-  gap: 3px;
-  padding: 0 20px 20px;
+  gap: 2px;
+  padding: 0 12px 12px;
   overflow-y: auto;
   flex: 1;
 }
 
 /* Step number header row - minimal */
 .step-number {
-  height: 24px;
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-  font-size: 10px;
+  font-size: 8px;
   font-weight: 500;
   color: rgba(255, 255, 255, 0.25);
   user-select: none;
@@ -1243,7 +1294,7 @@ html, body {
 }
 
 .header-spacer {
-  height: 24px;
+  height: 16px;
   background: transparent;
 }
 
@@ -1253,14 +1304,14 @@ html, body {
 }
 
 .piano-key {
-  width: 44px;
-  height: 32px;
+  width: 36px;
+  height: 20px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  padding-right: 10px;
+  padding-right: 6px;
   font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-  font-size: 11px;
+  font-size: 9px;
   font-weight: 500;
   color: rgba(255, 255, 255, 0.4);
   background: transparent;
@@ -1287,11 +1338,11 @@ html, body {
   color: rgba(255, 255, 255, 0.7);
 }
 
-/* Note cells - larger, touch-friendly */
+/* Note cells - tight */
 .note-cell {
-  height: 32px;
+  height: 20px;
   background: rgba(255, 255, 255, 0.03);
-  border-radius: 6px;
+  border-radius: 3px;
   cursor: pointer;
   transition: all 0.15s ease;
   user-select: none;
@@ -1303,8 +1354,8 @@ html, body {
 
 .note-cell.active {
   background: linear-gradient(135deg, #ff6b6b 0%, #e85d5d 100%);
-  box-shadow: 0 2px 12px rgba(255, 107, 107, 0.4);
-  border-radius: 6px;
+  box-shadow: 0 1px 8px rgba(255, 107, 107, 0.4);
+  border-radius: 3px;
   animation: notePopIn 0.15s ease-out;
 }
 
@@ -1401,7 +1452,7 @@ html, body {
   gap: 8px;
 }
 
-.mute-toggle {
+.piano-roll .mute-toggle {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1409,19 +1460,23 @@ html, body {
   font-family: -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: 13px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(255, 255, 255, 0.8) !important;
   user-select: none;
   background: rgba(255, 255, 255, 0.08);
   padding: 8px 14px;
   border-radius: 20px;
   transition: all 0.2s ease;
+  width: auto;
+  height: auto;
+  min-width: unset;
+  border: none;
 }
 
-.mute-toggle:hover {
+.piano-roll .mute-toggle:hover {
   background: rgba(255, 255, 255, 0.12);
 }
 
-.mute-toggle input[type="checkbox"] {
+.piano-roll .mute-toggle input[type="checkbox"] {
   appearance: none;
   width: 18px;
   height: 18px;
@@ -1433,11 +1488,11 @@ html, body {
   transition: all 0.15s ease;
 }
 
-.mute-toggle input[type="checkbox"]:checked {
+.piano-roll .mute-toggle input[type="checkbox"]:checked {
   background: #ff6b6b;
 }
 
-.mute-toggle.bass-toggle input[type="checkbox"]:checked {
+.piano-roll .mute-toggle.bass-toggle input[type="checkbox"]:checked {
   background: #a855f7;
 }
 
@@ -1474,7 +1529,7 @@ html, body {
   box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.4);
 }
 
-.mute-toggle input[type="checkbox"]:checked::after {
+.piano-roll .mute-toggle input[type="checkbox"]:checked::after {
   content: '✓';
   position: absolute;
   top: 1px;
@@ -1484,11 +1539,11 @@ html, body {
   font-weight: bold;
 }
 
-.mute-toggle:has(input:not(:checked)) {
+.piano-roll .mute-toggle:has(input:not(:checked)) {
   opacity: 0.5;
 }
 
-.mute-toggle:has(input:not(:checked)) span {
+.piano-roll .mute-toggle:has(input:not(:checked)) span {
   text-decoration: line-through;
 }
 
