@@ -9,10 +9,6 @@ html, body {
   overflow: hidden;
 }
 
-#canvas {
-  display: none;
-}
-
 /* Cards section */
 .cards-section {
   position: fixed;
@@ -180,32 +176,6 @@ html, body {
 
 .card-red .card-gradient {
   background: linear-gradient(to top, rgba(255, 107, 107, 0.7) 0%, rgba(255, 107, 107, 0.5) 10%, transparent 60%);
-}
-
-/* Card icon shapes - white icons over gradient */
-.card-icon {
-  width: 40px;
-  height: 40px;
-  border: 3px solid rgba(255, 255, 255, 0.9);
-  position: relative;
-  z-index: 2;
-}
-
-.shape-square {
-  width: 36px;
-  height: 36px;
-}
-
-.shape-circle {
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-}
-
-.shape-diamond {
-  width: 32px;
-  height: 32px;
-  transform: rotate(45deg);
 }
 
 @font-face {
@@ -746,20 +716,8 @@ html, body {
     margin-left: -105px;
   }
 
-  .card-icon {
-    width: 32px;
-    height: 32px;
-  }
 
-  .shape-circle {
-    width: 36px;
-    height: 36px;
-  }
 
-  .shape-diamond {
-    width: 26px;
-    height: 26px;
-  }
 
   .card-label {
     font-size: 12px;
@@ -808,20 +766,8 @@ html, body {
     height: 260px;
   }
 
-  .card-icon {
-    width: 32px;
-    height: 32px;
-  }
 
-  .shape-circle {
-    width: 36px;
-    height: 36px;
-  }
 
-  .shape-diamond {
-    width: 26px;
-    height: 26px;
-  }
 
   .card-label {
     font-size: 12px;
@@ -916,20 +862,8 @@ html, body {
     margin-left: -95px;
   }
 
-  .card-icon {
-    width: 28px;
-    height: 28px;
-  }
 
-  .shape-circle {
-    width: 32px;
-    height: 32px;
-  }
 
-  .shape-diamond {
-    width: 22px;
-    height: 22px;
-  }
 
   .card-label {
     font-size: 11px;
@@ -962,21 +896,8 @@ html, body {
     margin-left: -80px;
   }
 
-  .card-icon {
-    width: 24px;
-    height: 24px;
-    border-width: 2px;
-  }
 
-  .shape-circle {
-    width: 28px;
-    height: 28px;
-  }
 
-  .shape-diamond {
-    width: 20px;
-    height: 20px;
-  }
 
   .card-label {
     font-size: 10px;
