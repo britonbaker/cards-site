@@ -1,0 +1,8 @@
+# AI development context — not for public repos
+CLAUDE.md
+.claude/
+
+# Local dev
+node_modules/
+.DS_Store
+*.log
